@@ -3,12 +3,34 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <cstdint>
+#include <vector>
 
 int values[256] = {0};
 
-std::ifstream file; //std::ios::binary, std::ios::in
+
+
+//Some kind of linked list maybe il use it instead of the std::vector
+struct Node{
+    char data;
+
+    Node *next;
+};
+
+
+//The tree struct
+struct Tree{
+    int freq;
+    char data;
+
+    Tree *left;
+    Tree *right;
+};
+
+std::vector<Tree> unsorted_tree(256); //Vector containing the branches that still need sorting
 
 int main(int argc, char* argv[]){
+    //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
 
     if(argc==1){
         //Print smth like hello and usage
@@ -19,14 +41,25 @@ int main(int argc, char* argv[]){
     }else {
         //Added remote name for output file
     }
-
-    file.open("example.txt", std::ios::binary, std::ios::in); //Opens the file in binary mode
-
-    auto size = file.tellg(); //Reads the size of the file
+    std::ifstream file;
+    file.open("example.txt", std::ios::binary | std::ios::ate); //Open the file in binary mode and puts the pointer to the end of file with ate
+    if(!file.is_open()) throw std::runtime_error("Couldnt open the target file"); //Checks if the file opened
+    uint64_t size = file.tellg(); //Reads the size of the file
     std::string buff(size, '\0'); //Creates the buffer
     file.seekg(0); //Goes to pos 0
-    if(file.read(&buff[0], size))
-        std::cout << buff <<"\n"; //Prints out the buffer which we read
+    if(file.read(&buff[0], size)){
+        std::cout<<buff<<"\n";        
+    } //Reads and outputs the file
+
+    //Get the frequency of the chars in the buffer inside the ascii vallue array
+    for (char &element : buff){
+        values[int(element)]++;
+    }
+
+
+    
+
+
 
 
 
@@ -36,11 +69,11 @@ int main(int argc, char* argv[]){
     //thing might even be throw into read as it will be nedeed by compressor and
     //decompresoor but ath the same time i am not sure as we need
     //the same treee so we kinda build it the same its jsust '
-    //strange how exactly to go into this
+    //strange how exactly to go into thisgi
 
 
 
-
+   /*
 
     //Might switch to if stream if i understand how it works
     FILE *fileptr;
@@ -56,7 +89,7 @@ int main(int argc, char* argv[]){
     fread(buffer, 1, filelen, fileptr); // Read in the entire file
     fclose(fileptr); // Close the file
 
-
+*/
 
 
 
