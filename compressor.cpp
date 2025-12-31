@@ -5,31 +5,17 @@
 #include <fstream>
 #include <cstdint>
 #include <vector>
+#include "utils.h"
+
 
 int values[256] = {0};
 
+Tree root;
 
-
-//Some kind of linked list maybe il use it instead of the std::vector
-struct Node{
-    char data;
-
-    Node *next;
-};
-
-
-//The tree struct
-struct Tree{
-    int freq;
-    char data;
-
-    Tree *left;
-    Tree *right;
-};
-
-std::vector<Tree> unsorted_tree(256); //Vector containing the branches that still need sorting
+std::vector<Tree> unsorted_tree; //Vector containing the branches that still need sorting
 
 int main(int argc, char* argv[]){
+    unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
 
     if(argc==1){
@@ -56,12 +42,21 @@ int main(int argc, char* argv[]){
         values[int(element)]++;
     }
 
+    //Create a vector of all the elements and idk do tree stuff
 
-    
+    for(int &freq : values){
+        if(freq >= 1){
+            unsorted_tree.emplace_back((char)freq, freq);
+        }
+    }
 
 
 
 
+
+   // void assignNode(Tree *left, Tree *right){
+    //
+   // };     
 
     //Here should start the code which will do the
     //tree and stuff and whats above will probably be moved to 
@@ -91,8 +86,5 @@ int main(int argc, char* argv[]){
 
 */
 
-
-
-
-
 }
+
