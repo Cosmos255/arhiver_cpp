@@ -10,7 +10,7 @@
 
 int values[256] = {0};
 
-Tree root;
+//Tree root;
 
 std::vector<Tree> unsorted_tree; //Vector containing the branches that still need sorting
 
@@ -52,7 +52,13 @@ int main(int argc, char* argv[]){
     //sort the array with merge sort doesnt return anything
     merge::sort(unsorted_tree); //it doesnt return anything
 
+    for(Tree &arr : unsorted_tree){
+        std::cout<<arr.freq<<"\t";
+    }
+
     //building the treee
+
+
 
 
 

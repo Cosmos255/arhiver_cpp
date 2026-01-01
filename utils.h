@@ -9,20 +9,18 @@ struct Node{
 
 //The tree struct
 struct Tree{
-    int freq;
-    char data;
+    int freq = 0;
+    char data = '\0';
 
     Tree *left = nullptr;
     Tree *right = nullptr;
+
+    Tree() = default;
 
     Tree(char val, int frc) : data(val), freq(frc){}
 };
 
 namespace merge{
-
-    void sort(std::vector<Tree> &arr){
-        merge_sort(arr, 0, arr.size()-1);
-    }
 
     void merge(std::vector<Tree> &arr, int left, int mid, int right){
         int n1=mid-left+1;
@@ -40,7 +38,7 @@ namespace merge{
             if(L[p].freq > R[k].freq){
                 arr[pos++] = std::move(L[p++]);
             }
-            else if(L[p].freq < R[k].freq){
+            else{
                 arr[pos++] = std::move(R[k++]);
             }
         }
@@ -50,17 +48,27 @@ namespace merge{
         while(k < n2){
             arr[pos++] = std::move(R[k++]);
         }
+        return;
     }
 
     void merge_sort(std::vector<Tree> &arr, int left, int right){
         if(left>= right)
             return;
 
+
         int mid = left+(right-left)/2;
         merge_sort(arr, left, mid);
         merge_sort(arr, mid+1, right);
         merge(arr, left, mid, right);
     }
+
+
+    void sort(std::vector<Tree> &arr){
+        merge_sort(arr, 0, arr.size()-1);
+        return;
+    }
+
+
 
 }
 
