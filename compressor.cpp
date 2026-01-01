@@ -49,7 +49,10 @@ int main(int argc, char* argv[]){
             unsorted_tree.emplace_back((char)freq, freq);
         }
     }
+    //sort the array with merge sort doesnt return anything
+    merge::sort(unsorted_tree); //it doesnt return anything
 
+    //building the treee
 
 
 

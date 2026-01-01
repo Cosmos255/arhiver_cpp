@@ -18,49 +18,50 @@ struct Tree{
     Tree(char val, int frc) : data(val), freq(frc){}
 };
 
+namespace merge{
 
-std::vector<Tree> sort(std::vector<Tree> &unsorted){
-    
-
-}
-
-void merge(std::vector<Tree> &arr, int left, int mid, int right){
-
-    int n1=mid-left+1;
-    int n2=right-mid;
-
-    std::vector<Tree> L(n1), R(n2);
-
-    for(int i=0; i < n1; i++){
-        L[i] = arr[left+i];
-    }
-    for(int j=0; j < n2; j++){
-        R[j] = arr[mid+1+j];
+    void sort(std::vector<Tree> &arr){
+        merge_sort(arr, 0, arr.size()-1);
     }
 
-    int p=0, k=0;
-    int pos = left;
-    while(p < n1 || k <n2){
-
-        if(L[p].freq > R[k].freq){
-            arr[k++] = std::move(L[p++]);
+    void merge(std::vector<Tree> &arr, int left, int mid, int right){
+        int n1=mid-left+1;
+        int n2=right-mid;
+        std::vector<Tree> L(n1), R(n2);
+        for(int i=0; i < n1; i++){
+            L[i] = arr[left+i];
         }
-        else if(L[p].freq < R[k].freq){
-            arr[k++] = std::move(R[k++]);
+        for(int j=0; j < n2; j++){
+            R[j] = arr[mid+1+j];
+        }
+        int p=0, k=0;
+        int pos = left;
+        while(p < n1 && k <n2){
+            if(L[p].freq > R[k].freq){
+                arr[pos++] = std::move(L[p++]);
+            }
+            else if(L[p].freq < R[k].freq){
+                arr[pos++] = std::move(R[k++]);
+            }
+        }
+        while(p < n1){
+            arr[pos++] = std::move(L[p++]);
+        }
+        while(k < n2){
+            arr[pos++] = std::move(R[k++]);
         }
     }
 
+    void merge_sort(std::vector<Tree> &arr, int left, int right){
+        if(left>= right)
+            return;
 
-    std::vector<Tree>
+        int mid = left+(right-left)/2;
+        merge_sort(arr, left, mid);
+        merge_sort(arr, mid+1, right);
+        merge(arr, left, mid, right);
+    }
+
 }
 
 
-void merge_sort(std::vector<Tree> &arr, int left, int right){
-    if(left>= right)
-        return;
-
-    int mid = left+(right-left)/2;
-    merge_sort(arr, left, mid);
-    merge_sort(arr, mid+1, right);
-    merge(arr, left, mid, right);
-}
