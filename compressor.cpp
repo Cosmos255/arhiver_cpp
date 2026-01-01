@@ -59,14 +59,6 @@ int main(int argc, char* argv[]){
     //building the treee
 
 
-
-
-
-
-   // void assignNode(Tree *left, Tree *right){
-    //
-   // };     
-
     //Here should start the code which will do the
     //tree and stuff and whats above will probably be moved to 
     //read or to arhive via move being here doesnt really do a 
@@ -74,6 +66,9 @@ int main(int argc, char* argv[]){
     //decompresoor but ath the same time i am not sure as we need
     //the same treee so we kinda build it the same its jsust '
     //strange how exactly to go into thisgi
+
+
+    
 
 
 
