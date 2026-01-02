@@ -23,20 +23,20 @@ struct Tree{
 
 namespace merge{
 
-    void merge(std::vector<Tree> &arr, int left, int mid, int right){
+    void merge(std::vector<std::unique_ptr<Tree>> &arr, int left, int mid, int right){
         int n1=mid-left+1;
         int n2=right-mid;
-        std::vector<Tree> L(n1), R(n2);
+        std::vector<std::unique_ptr<Tree>> L(n1), R(n2);
         for(int i=0; i < n1; i++){
-            L[i] = arr[left+i];
+            L[i] = std::move(arr[left+i]);
         }
         for(int j=0; j < n2; j++){
-            R[j] = arr[mid+1+j];
+            R[j] = std::move(arr[mid+1+j]);
         }
         int p=0, k=0;
         int pos = left;
         while(p < n1 && k <n2){
-            if(L[p].freq > R[k].freq){
+            if(L[p]->freq > R[k]->freq){
                 arr[pos++] = std::move(L[p++]);
             }
             else{
@@ -52,7 +52,7 @@ namespace merge{
         return;
     }
 
-    void merge_sort(std::vector<Tree> &arr, int left, int right){
+    void merge_sort(std::vector<std::unique_ptr<Tree>> &arr, int left, int right){
         if(left>= right)
             return;
 
@@ -64,7 +64,7 @@ namespace merge{
     }
 
 
-    void sort(std::vector<Tree> &arr){
+    void sort(std::vector<std::unique_ptr<Tree>> &arr){
         merge_sort(arr, 0, arr.size()-1);
         return;
     }

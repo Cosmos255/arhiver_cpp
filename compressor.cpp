@@ -47,7 +47,7 @@ int main(int argc, char* argv[]){
 
     for(int &freq : values){
         if(freq >= 1){
-            unsorted_tree.emplace_back((char)freq, freq);
+            unsorted_tree.push_back(std::make_unique<Tree>((char)freq, freq));
         }
     }
     //sort the array with merge sort doesnt return anything
