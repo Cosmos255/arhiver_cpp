@@ -53,11 +53,13 @@ int main(int argc, char* argv[]){
     //sort the array with merge sort doesnt return anything
     merge::sort(unsorted_tree); //it doesnt return anything
 
-    for(Tree &arr : unsorted_tree){
+    /*
+    for(Tree *Tree : unsorted_tree){
         std::cout<<arr.freq<<"\t";
     }
-
+    */
     //building the treee
+
 
 
     //Here should start the code which will do the
@@ -91,10 +93,11 @@ int main(int argc, char* argv[]){
     fclose(fileptr); // Close the file
 
 */
+    return 0;
 
 }
 
-Tree buildTree(std::vector<Tree> &tree){
+Tree buildTree(std::vector<std::unique_ptr<Tree>> &tree){
     if(tree.size() > 1){
         size_t pos_l = tree.size()-2;
         size_t pos_r = tree.size()-1;
