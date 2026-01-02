@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include "utils.h"
 
 
@@ -12,7 +13,7 @@ int values[256] = {0};
 
 //Tree root;
 
-std::vector<Tree> unsorted_tree; //Vector containing the branches that still need sorting
+std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
 
 int main(int argc, char* argv[]){
     unsorted_tree.reserve(256);
@@ -68,8 +69,9 @@ int main(int argc, char* argv[]){
     //strange how exactly to go into thisgi
 
 
-    
+    //Tree *root;
 
+   // root = buildTree();
 
 
    /*
@@ -92,3 +94,23 @@ int main(int argc, char* argv[]){
 
 }
 
+Tree buildTree(std::vector<Tree> &tree){
+    if(tree.size() > 1){
+        size_t pos_l = tree.size()-2;
+        size_t pos_r = tree.size()-1;
+
+        if(tree.at(pos_l).freq < tree.at(pos_r).freq){
+            std::swap(pos_l, pos_r);
+        }
+        Tree node;
+        node.freq = tree[pos_l].freq+tree[pos_r].freq;
+        Tree left = std::move(tree[pos_l]);
+        Tree right = std::move(tree[pos_r]);
+        node.left = std::move(left);
+        node.right = std::move(right);
+
+
+    }else{
+
+    }
+}
