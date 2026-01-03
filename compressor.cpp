@@ -15,6 +15,8 @@ int values[256] = {0};
 
 std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
 
+void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
+
 int main(int argc, char* argv[]){
     unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
@@ -40,14 +42,15 @@ int main(int argc, char* argv[]){
 
     //Get the frequency of the chars in the buffer inside the ascii vallue array
     for (char &element : buff){
-        values[int(element)]++;
+        values[(int)(element)]++;  //static cast is safer
     }
 
     //Create a vector of all the elements and idk do tree stuff
 
-    for(int &freq : values){
+    for(int i = 0; i < buff.size() : values){
         if(freq >= 1){
-            unsorted_tree.push_back(std::make_unique<Tree>((char)freq, freq));
+            unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(freq), freq));
+            std::cout<<"\n"<<unsorted_tree.back()->data<<"\n"<<unsorted_tree.back()->freq<<"\n";
         }
     }
     //sort the array with merge sort doesnt return anything
@@ -63,7 +66,8 @@ int main(int argc, char* argv[]){
     buildTree(unsorted_tree);
     auto root = std::move(unsorted_tree.at(0));
     unsorted_tree.clear();
-    
+
+    std::cout<<"\n"<<root->left->data;
 
     //Here should start the code which will do the
     //tree and stuff and whats above will probably be moved to 
@@ -100,21 +104,17 @@ int main(int argc, char* argv[]){
 
 }
 
-auto buildTree(std::vector<std::unique_ptr<Tree>> &tree){
+void buildTree(std::vector<std::unique_ptr<Tree>> &tree){
     while(tree.size() > 1){
         auto right = std::move(tree.back());
         tree.pop_back();
         auto left = std::move(tree.back());
         tree.pop_back();
 
-        if(left->freq > right->freq){
-            std::swap(left, right);
-        }
-
         auto parent = std::make_unique<Tree>();
         parent->freq = right->freq + left->freq;
         parent->left = std::move(left);
         parent->right = std::move(right);
-        tree.push_back(parent);
+        tree.push_back(std::move(parent));
     }
 }

@@ -11,7 +11,7 @@ struct Node{
 //The tree struct
 struct Tree{
     int freq = 0;
-    char data = '\0';
+    unsigned char data = '\0';
 
     //Tree *left = nullptr;
     //Tree *right = nullptr;
@@ -21,7 +21,7 @@ struct Tree{
 
     Tree() = default;
 
-    Tree(char val, int frc) : data(val), freq(frc){}
+    Tree(unsigned char val, int frc) : data(val), freq(frc){}
 };
 
 namespace merge{
