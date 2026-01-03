@@ -13,8 +13,11 @@ struct Tree{
     int freq = 0;
     char data = '\0';
 
-    Tree *left = nullptr;
-    Tree *right = nullptr;
+    //Tree *left = nullptr;
+    //Tree *right = nullptr;
+
+    std::unique_ptr<Tree> left;
+    std::unique_ptr<Tree> right; 
 
     Tree() = default;
 

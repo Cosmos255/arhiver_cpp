@@ -60,7 +60,10 @@ int main(int argc, char* argv[]){
     */
     //building the treee
 
-
+    buildTree(unsorted_tree);
+    auto root = std::move(unsorted_tree.at(0));
+    unsorted_tree.clear();
+    
 
     //Here should start the code which will do the
     //tree and stuff and whats above will probably be moved to 
@@ -97,23 +100,21 @@ int main(int argc, char* argv[]){
 
 }
 
-Tree buildTree(std::vector<std::unique_ptr<Tree>> &tree){
-    if(tree.size() > 1){
-        size_t pos_l = tree.size()-2;
-        size_t pos_r = tree.size()-1;
+auto buildTree(std::vector<std::unique_ptr<Tree>> &tree){
+    while(tree.size() > 1){
+        auto right = std::move(tree.back());
+        tree.pop_back();
+        auto left = std::move(tree.back());
+        tree.pop_back();
 
-        if(tree.at(pos_l).freq < tree.at(pos_r).freq){
-            std::swap(pos_l, pos_r);
+        if(left->freq > right->freq){
+            std::swap(left, right);
         }
-        Tree node;
-        node.freq = tree[pos_l].freq+tree[pos_r].freq;
-        Tree left = std::move(tree[pos_l]);
-        Tree right = std::move(tree[pos_r]);
-        node.left = std::move(left);
-        node.right = std::move(right);
 
-
-    }else{
-
+        auto parent = std::make_unique<Tree>();
+        parent->freq = right->freq + left->freq;
+        parent->left = std::move(left);
+        parent->right = std::move(right);
+        tree.push_back(parent);
     }
 }
