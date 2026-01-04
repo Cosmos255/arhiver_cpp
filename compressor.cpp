@@ -42,15 +42,15 @@ int main(int argc, char* argv[]){
 
     //Get the frequency of the chars in the buffer inside the ascii vallue array
     for (char &element : buff){
-        values[(int)(element)]++;  //static cast is safer
+        values[(int)(element)]++;  //yea that is brojen
     }
 
     //Create a vector of all the elements and idk do tree stuff
 
-    for(int i = 0; i < buff.size() : values){
-        if(freq >= 1){
-            unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(freq), freq));
-            std::cout<<"\n"<<unsorted_tree.back()->data<<"\n"<<unsorted_tree.back()->freq<<"\n";
+    for(int i = 0; i < 255; i++){
+        if(values[i] >= 1){
+            unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(i), values[i]));
+            std::cout<<"\n"<<unsorted_tree.back()->data<<"\t"<<unsorted_tree.back()->freq<<"\n";
         }
     }
     //sort the array with merge sort doesnt return anything
@@ -79,7 +79,7 @@ int main(int argc, char* argv[]){
 
 
     //Tree *root;
-
+   
    // root = buildTree();
 
 
