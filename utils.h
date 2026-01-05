@@ -1,10 +1,27 @@
 #include <vector>
 #include <memory>
 
+enum type_e {lvalue, match};
+
 struct Node{
     char data;
 
     Node *next;
+};
+
+//The struct for the tokens yes those are nedded for
+//sliding window :/
+
+struct token{
+    type_e type;
+    char data;
+    int len;
+    int dist;
+    
+    token() = default;
+    token(int l, int d) : len(l), dist(d){};
+    token(char d) : data(d){};
+    
 };
 
 
