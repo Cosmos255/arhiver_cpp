@@ -42,12 +42,12 @@ int main(int argc, char* argv[]){
 
     //Get the frequency of the chars in the buffer inside the ascii vallue array
     for (char &element : buff){
-        values[(int)(element)]++;  //yea that is brojen
+        values[(int)(element)]++;  //yea that is broke or maybe not who knows
     }
 
     //Create a vector of all the elements and idk do tree stuff
 
-    for(int i = 0; i < 255; i++){
+    for(int i = 0; i < 256; i++){
         if(values[i] >= 1){
             unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(i), values[i]));
             std::cout<<"\n"<<unsorted_tree.back()->data<<"\t"<<unsorted_tree.back()->freq<<"\n";
