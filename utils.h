@@ -3,18 +3,10 @@
 
 enum type_e {lvalue, match};
 
-struct Node{
-    char data;
-
-    Node *next;
-};
-
-//The struct for the tokens yes those are nedded for
-//sliding window :/
 
 struct token{
-    type_e type;
-    char data;
+    type_e type = lvalue;
+    unsigned char data;
     int len;
     int dist;
     
@@ -23,7 +15,6 @@ struct token{
     token(char d) : data(d){};
     
 };
-
 
 //The tree struct
 struct Tree{
