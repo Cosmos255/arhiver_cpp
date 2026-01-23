@@ -55,58 +55,46 @@ int main(){
 
     std::string window_slide((SEARCH_SIZE+LOOkUP_SIZE), '\0');
 
-    in.getline(&window_slide[0], read_size);
+    in.read(&window_slide[0], read_size);
+    unsigned long int read = in.gcount();
 
     uint64_t srch = 0;
     uint64_t look = 1;
 
+    
     while(srch-look == 0);
+
+
 
 
 }
 
 void find_match(int &srch, int &look, std::string &buff){
     //int search = l_s-1 , lookup = l_s;  
-    std::vector<std::pair<int , int>> matches; //length distance
+    std::vector<std::pair<int , int>> matches; //distance length
+
+    //need to add code for like checking how much data we have left 
 
 
-    while(search>=p_s){
-        int length=1;
-        lookup = l_s;
-        int distance = lookup-search;
-
-        if(buff.at(search%read_size)==buff.at(l_s%read_size)){
-            while( search+1 < l_s && (search%read_size)+1 != p_s && buff.at((search%read_size)+1)==buff.at(lookup%read_size)){
-                length++;
-                search++;
-                lookup++;
-            }
-            if(length>3){
-                matches.emplace_back(length, distance);
-            }else{
-                continue;
-            }
-        }
-
-
-        while(buff.at((search%read_size))==buff.at(lookup%read_size))
-
-
-        search=search-distance;
-    }
-
-    int distance = 1;
+    int distance = 0;
     //srch and look both represent the pointer to the start of lookup and search
     while(look-distance >= srch){
         int length = 0;
 
-        while(buff.at(look-distance+length)==buff.at(look+length)){
-            length++;
+        //read size where are you :P
+        while(length<distance){
+            if(buff.at((look-distance+length)%read_size)==buff.at((look+length)%read_size)){
+                length++;
+            }else{
+                break;
+            }
+        };
+
+        if(length > 2){
+            matches.emplace_back(distance, length);    
         }
+        distance++;
     }
-
-
-
 };
 
 
