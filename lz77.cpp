@@ -60,23 +60,27 @@ int main(){
 
     uint64_t srch = 0;
     uint64_t look = 1;
+    uint64_t notav = 0;
 
-    
-    while(srch-look == 0);
+    std::pair<int, int> match; //distance length
+    int distance = 1;
 
+    while(look-distance >= srch){
+        find_match();
+    }
 
 
 
 }
 
-void find_match(int &srch, int &look, std::string &buff){
+void find_match(uint64_t &srch, uint64_t &look, uint64_t &notav, std::string &buff){
     //int search = l_s-1 , lookup = l_s;  
-    std::vector<std::pair<int , int>> matches; //distance length
+    
 
     //need to add code for like checking how much data we have left 
 
 
-    int distance = 0;
+    int distance = 1;
     //srch and look both represent the pointer to the start of lookup and search
     while(look-distance >= srch){
         int length = 0;
@@ -94,6 +98,12 @@ void find_match(int &srch, int &look, std::string &buff){
             matches.emplace_back(distance, length);    
         }
         distance++;
+    }
+
+    for(int i=1; i<matches.size(); i++){
+        if(matches.at(i).second > matches.at(0).second){
+            std::swap(matches.at(i), matches.at(0));
+        }
     }
 };
 
