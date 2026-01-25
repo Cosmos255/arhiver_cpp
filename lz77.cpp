@@ -8,9 +8,9 @@ const int SEARCH_SIZE = 32*1000;
 const int LOOkUP_SIZE = 258;
 const int read_size = SEARCH_SIZE+LOOkUP_SIZE;
 const int min_match = 3;
-const int min_lookup = 10
+const int min_lookup = 10;
 
-std::vector<token> tokens;
+
  
 //Tryna make the lz77 and see if it works or if it will work
 /*
@@ -32,38 +32,43 @@ sooo complicated -_-
 //I need to swtich to a stuct cuz so many pointer passing is
 //painfiull
 
+struct LZ77{
+
+    std::ifstream in;
+
+    std::vector<token> tokens;
+    std::string window_slide;
+    uint64_t read;
+
+    uint64_t srch = 0;
+    uint64_t look = 1;
+    uint64_t notav;
+
+    std::pair<int, int> match; //distance length
+
+
+};
+
 
 
 
 int main(){
+    LZ77 lz77;
 
+    lz77.in.open("example.txt", std::ios::ate);
 
-
-    std::ifstream in;
-    in.open("example.txt", std::ios::ate);
-    if(!in.is_open()){
+    if(!lz77.in.is_open()){
         std::cout<<"Couldnt open the file";
     }
-    uint64_t size = in.tellg();
-    std::string buff(size, '\0');
-    in.seekg(0);
-    in.getline(&buff[0], size);
 
+    uint64_t size = lz77.in.tellg();
 
-    std::streamsize bytesRead = in.gcount();   
+    lz77.window_slide.resize((SEARCH_SIZE+LOOkUP_SIZE), '\0');
 
-    if(bytesRead < read_size){
-        
-    }
+    lz77.in.read(&lz77.window_slide[0], read_size);
 
-    std::string window_slide((SEARCH_SIZE+LOOkUP_SIZE), '\0');
-
-    in.read(&window_slide[0], read_size);
-    uint64_t read = in.gcount();
-
-    uint64_t srch = 0;
-    uint64_t look = 1;
-    uint64_t notav = read;
+    uint64_t read = lz77.in.gcount();
+    lz77.notav = read;
 
     std::pair<int, int> match; //distance length
     uint64_t distance = 1;
@@ -74,17 +79,23 @@ int main(){
         }
         find_match(distance, look, notav, match);
         distance++;
-
         move_window(distance);
     }
 
     //So it seems i need some hasing for the speed as checkign each 
     //charcachter bit by bit is quite sloew like n^2
 
-
+    lz77.look = 5;
 }
-
+lz77.look = 5;
 void find_match(uint64_t &distance, uint64_t &look, uint64_t &notav, std::string &buff, std::pair<int, int> &match){
+
+    lz77.look = 5;
+
+    while (lz77.look      - distance){
+
+    }
+
 
 }
 
@@ -93,6 +104,16 @@ void find_match(uint64_t &srch, uint64_t &look, uint64_t &notav, std::string &bu
     
 
     //need to add code for like checking how much data we have left 
+
+    /*
+    uint64_t hash = a<<16 | b<<8 | c;
+
+    if(hash = hash ) => add 1 more char 
+
+    mover window = (hash & 0xFFFF) | d;
+
+    
+    */
 
 
     int distance = 1;
@@ -127,6 +148,7 @@ void find_match(uint64_t &srch, uint64_t &look, uint64_t &notav, std::string &bu
 
 void move_window(int dist){
 
+
 }
 
 void fill_window(uint64_t &read, uint64_t &distance, uint64_t &notav, uint64_t &srch, std::string &window_slide){
@@ -134,3 +156,4 @@ void fill_window(uint64_t &read, uint64_t &distance, uint64_t &notav, uint64_t &
     in.read(&window_slide[notav], fill_size);
     read = in.gcount();
 }
+
