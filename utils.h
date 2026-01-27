@@ -11,7 +11,7 @@ struct token{
     int dist;
     
     token() = default;
-    token(int l, int d) : len(l), dist(d){};
+    token(int l, int d) : len(l), dist(d), type(match) {};
     token(char d) : data(d){};
     
 };

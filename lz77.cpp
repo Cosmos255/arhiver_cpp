@@ -38,7 +38,6 @@ struct LZ77{
 
     std::ifstream in;
 
-    std::vector<token> tokens;
     std::string ws;
     uint64_t read;
 
@@ -52,11 +51,13 @@ struct LZ77{
 
 };
 
-
+    std::vector<token> tokens;
 
 
 int main(){
     LZ77 lz77;
+
+    
 
     lz77.in.open("example.txt", std::ios::ate);
 
@@ -81,7 +82,7 @@ int main(){
             fill_window(read,distance,lz77);
         }
         find_match(distance, lz77);
-        if(lz77.match.second) move_window(lz77.match.second, lz77);
+        move_window(lz77);
     }
 
     while(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){
@@ -95,6 +96,8 @@ int main(){
 
 void find_match(uint64_t &distance, LZ77 &lz){
     while(lz.look-distance >= lz.srch){
+        lz.match.first = 0;
+        lz.match.second = 0;
 
         int length = 0;
         uint64_t hash = create_hash(lz.look, lz);
@@ -113,7 +116,7 @@ void find_match(uint64_t &distance, LZ77 &lz){
             s_hash = create_hash(hash, lz.look-distance+length, lz); // I think these two lines work who knows
         }
 
-        if(length > lz.match.second){
+        if(length > 2 && length > lz.match.second){
             lz.match.first = distance;
             lz.match.second = length;
         }
@@ -123,7 +126,15 @@ void find_match(uint64_t &distance, LZ77 &lz){
 
 
 
-void move_window(int dist, LZ77 &lz){
+void move_window(LZ77 &lz){
+    int dist = lz.match.second;
+    if(lz.match.first == 0){
+        dist = 1;
+        tokens.emplace_back(lz.ws.at(lz.look));
+    }else{
+        tokens.emplace_back(lz.match.second, lz.match.first);
+    }
+
     if(lz.srch == SEARCH_SIZE-1){
         lz.srch+=dist;
         lz.look+=dist;
