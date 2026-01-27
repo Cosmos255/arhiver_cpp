@@ -12,6 +12,8 @@ const int min_lookup = 10;
 
 
  
+
+
 //Tryna make the lz77 and see if it works or if it will work
 /*
 IDEA
@@ -58,6 +60,7 @@ int main(){
 
     lz77.in.open("example.txt", std::ios::ate);
 
+
     if(!lz77.in.is_open()){
         std::cout<<"Couldnt open the file";
     }
@@ -72,38 +75,42 @@ int main(){
     lz77.notav = read;
     uint64_t distance = 3;
 
-    //need to rethink this yet again
 
-    while(lz77.look-distance >= lz77.srch){
-        if(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){ // read == read_size might not be the best idea
-            fill_window(read, distance);
+    while(lz77.look < lz77.notav){
+        if(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){ 
+            fill_window(read,distance,lz77);
         }
         find_match(distance, lz77);
-        distance++;
-        move_window(distance);
+        if(lz77.match.second) move_window(lz77.match.second, lz77);
     }
 
-    //So it seems i need some hasing for the speed as checkign each 
-    //charcachter bit by bit is quite sloew like n^2
+    while(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){
+        
+    }
 
 }
+
+
+
+
 void find_match(uint64_t &distance, LZ77 &lz){
     while(lz.look-distance >= lz.srch){
 
         int length = 0;
-    
-        uint64_t hash = create_hash(lz.look+length, lz);
-        uint64_t s_hash = create_hash(lz.look-distance+length, lz);
-
+        uint64_t hash = create_hash(lz.look, lz);
+        uint64_t s_hash = create_hash(lz.look-distance, lz);
         length = 2;
 
         while(length<distance && lz.look+length < lz.notav){
             if(hash == s_hash){
-                length ++;
+                length++;
 
             }else{
                 break;
             }
+
+            hash = create_hash(hash, lz.look+length, lz);
+            s_hash = create_hash(hash, lz.look-distance+length, lz); // I think these two lines work who knows
         }
 
         if(length > lz.match.second){
@@ -111,63 +118,25 @@ void find_match(uint64_t &distance, LZ77 &lz){
             lz.match.second = length;
         }
         distance++;
-
-        length++;
     }
 }
 
-void find_match(uint64_t &srch, uint64_t &look, uint64_t &notav, std::string &buff){
 
-    //need to add code for like checking how much data we have left 
 
-    /*
-    uint64_t hash = a<<16 | b<<8 | c;
-
-    if(hash = hash ) => add 1 more char 
-
-    mover window = (hash & 0xFFFF) | d;
-    
-    */
-
-    int distance = 1;
-    //srch and look both represent the pointer to the start of lookup and search
-    while(look-distance >= srch){
-        int length = 0;
-
-        //read size where are you :P
-        while(length<distance){
-            if(buff.at((look-distance+length)%read_size)==buff.at((look+length)%read_size)){
-                length++;
-            }else{
-                break;
-            }
-        };
-
-        if(length > 2){
-            matches.emplace_back(distance, length);    
-        }
-        distance++;
+void move_window(int dist, LZ77 &lz){
+    if(lz.srch == SEARCH_SIZE-1){
+        lz.srch+=dist;
+        lz.look+=dist;
+        lz.notav+=dist;
     }
-
-    for(int i=1; i< matches.size(); i++){
-        if(matches.at(i).second > matches.at(0).second){
-            std::swap(matches.at(i), matches.at(0));
-        }
-    }
-};
-
-
-
-
-void move_window(int dist){
-
-
 }
 
-void fill_window(uint64_t &read, uint64_t &distance, uint64_t &notav, uint64_t &srch, std::string &ws){
-    int fill_size = (srch*2)-notav;
-    in.read(&ws[notav], fill_size);
-    read = in.gcount();
+
+//might remove read from lz 77 struct
+void fill_window(uint64_t &read, uint64_t &distance, LZ77 &lz){
+    int fill_size = (lz.srch*2)-lz.notav;
+    lz.in.read(&lz.ws[lz.notav], fill_size);
+    read = lz.in.gcount();
 }
 
 uint64_t create_hash(uint64_t pos1, LZ77 &lz){
