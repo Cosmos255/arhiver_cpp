@@ -43,7 +43,7 @@ struct LZ77{
 
     uint64_t srch = 0;
     uint64_t look = 1;
-    uint64_t notav;
+    uint64_t notav = 0;
 
 
     std::pair<int, int> match; //distance length
@@ -53,11 +53,14 @@ struct LZ77{
 
     std::vector<token> tokens;
 
+void find_match(uint64_t &distance, LZ77 &lz);
+void move_window(LZ77 &lz);
+void fill_window(uint64_t &read, uint64_t &distance, LZ77 &lz);
+uint64_t create_hash(uint64_t pos1, LZ77 &lz);
+uint64_t create_hash(uint64_t hash, int pos_nxt, LZ77 &lz);
 
 int main(){
     LZ77 lz77;
-
-    
 
     lz77.in.open("example.txt", std::ios::ate);
 
@@ -67,6 +70,7 @@ int main(){
     }
 
     uint64_t size = lz77.in.tellg();
+    lz77.in.seekg(0);
 
     lz77.ws.resize((SEARCH_SIZE+LOOkUP_SIZE), '\0');
 
@@ -78,15 +82,23 @@ int main(){
 
 
     while(lz77.look < lz77.notav){
-        if(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){ 
+        std::cout<<"Hi \n";
+        if(lz77.look < min_lookup+lz77.notav && !lz77.in.eof()){ 
             fill_window(read,distance,lz77);
         }
         find_match(distance, lz77);
         move_window(lz77);
     }
 
-    while(lz77.look-lz77.notav < min_lookup && !lz77.in.eof()){
-        
+    for(token t : tokens){
+        std::cout<<"TOKEN:\n";
+        if(t.type == match){
+            std::cout<<"match\n";
+            std::cout<<t.dist<<"\t"<<t.len;
+        }else{
+            std::cout<<t.data<<"\n";
+            std::cout<<"lvalue\n";
+        }
     }
 
 }
@@ -95,9 +107,10 @@ int main(){
 
 
 void find_match(uint64_t &distance, LZ77 &lz){
-    while(lz.look-distance >= lz.srch){
-        lz.match.first = 0;
-        lz.match.second = 0;
+    lz.match.first = 0;
+    lz.match.second = 0;
+
+    while(lz.look >= lz.srch+distance){
 
         int length = 0;
         uint64_t hash = create_hash(lz.look, lz);
@@ -122,6 +135,7 @@ void find_match(uint64_t &distance, LZ77 &lz){
         }
         distance++;
     }
+
 }
 
 
@@ -138,16 +152,16 @@ void move_window(LZ77 &lz){
     if(lz.srch == SEARCH_SIZE-1){
         lz.srch+=dist;
         lz.look+=dist;
-        lz.notav+=dist;
     }
 }
 
 
 //might remove read from lz 77 struct
 void fill_window(uint64_t &read, uint64_t &distance, LZ77 &lz){
-    int fill_size = (lz.srch*2)-lz.notav;
+    int fill_size = (lz.srch+read_size)-lz.notav; //not sure this works
     lz.in.read(&lz.ws[lz.notav], fill_size);
     read = lz.in.gcount();
+    lz.notav+=read;
 }
 
 uint64_t create_hash(uint64_t pos1, LZ77 &lz){
