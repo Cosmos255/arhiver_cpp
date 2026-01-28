@@ -12,7 +12,7 @@ struct token{
     
     token() = default;
     token(int l, int d) : len(l), dist(d), type(match) {};
-    token(char d) : data(d){};
+    token(unsigned char d) : data(d){};
     
 };
 
