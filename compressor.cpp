@@ -6,14 +6,19 @@
 #include <cstdint>
 #include <vector>
 #include <memory>
+#include <unordered_map>
 #include "utils.h"
+#include "lz77.h"
 
 
-int values[256] = {0};
+
+int values[257] = {0};
 
 //Tree root;
 
 std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
+std::vector<std::unique_ptr<Tree>> unsorted_len;
+std::vector<std::unique_ptr<Tree>> unsorted_dist;
 
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
 
@@ -30,6 +35,10 @@ int main(int argc, char* argv[]){
     }else {
         //Added remote name for output file
     }
+
+    /*
+    
+
     std::ifstream file;
     file.open("example.txt", std::ios::binary | std::ios::ate); //Open the file in binary mode and puts the pointer to the end of file with ate
     if(!file.is_open()) throw std::runtime_error("Couldnt open the target file"); //Checks if the file opened
@@ -47,12 +56,25 @@ int main(int argc, char* argv[]){
 
     //Create a vector of all the elements and idk do tree stuff
 
+
     for(int i = 0; i < 256; i++){
         if(values[i] >= 1){
             unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(i), values[i]));
             std::cout<<"\n"<<unsorted_tree.back()->data<<"\t"<<unsorted_tree.back()->freq<<"\n";
         }
     }
+*/
+
+    auto lzed = lz77_token("file.example");
+    for(token &tk : lzed){
+        if(tk.type == match)
+            values[256]++;
+        else
+            values[(int)(tk.data)]++;
+    }
+
+
+
     //sort the array with merge sort doesnt return anything
     merge::sort(unsorted_tree); //it doesnt return anything
 
@@ -69,37 +91,8 @@ int main(int argc, char* argv[]){
 
     std::cout<<"\n"<<root->left->data;
 
-    //Here should start the code which will do the
-    //tree and stuff and whats above will probably be moved to 
-    //read or to arhive via move being here doesnt really do a 
-    //thing might even be throw into read as it will be nedeed by compressor and
-    //decompresoor but ath the same time i am not sure as we need
-    //the same treee so we kinda build it the same its jsust '
-    //strange how exactly to go into thisgi
 
 
-    //Tree *root;
-   
-   // root = buildTree();
-
-
-   /*
-
-    //Might switch to if stream if i understand how it works
-    FILE *fileptr;
-    char *buffer;
-    long filelen;
-
-    fileptr = fopen("myfile.txt", "rb");  // Open the file in binary mode
-    fseek(fileptr, 0, SEEK_END);          // Jump to the end of the file
-    filelen = ftell(fileptr);             // Get the current byte offset in the file
-    rewind(fileptr);                      // Jump back to the beginning of the file
-
-    buffer = (char *)malloc(filelen * sizeof(char)); // Enough memory for the file
-    fread(buffer, 1, filelen, fileptr); // Read in the entire file
-    fclose(fileptr); // Close the file
-
-*/
     return 0;
 
 }

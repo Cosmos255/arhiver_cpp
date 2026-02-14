@@ -1,3 +1,4 @@
+#pragma once;
 #include <iostream>
 #include <string>
 #include <fstream>
@@ -51,7 +52,7 @@ struct LZ77{
 
 };
 
-    std::vector<token> tokens;
+std::vector<token> tokens;
 
 void find_match(LZ77 &lz);
 void move_window(LZ77 &lz);
@@ -59,18 +60,19 @@ void fill_window(uint64_t &read, LZ77 &lz);
 uint64_t create_hash(uint64_t pos1, LZ77 &lz);
 uint64_t create_hash(uint64_t hash, int pos_nxt, LZ77 &lz);
 
-int main(){
+std::vector<token> lz77_token(std::string file_name){
     LZ77 lz77;
 
-    lz77.in.open("example.txt", std::ios::binary |  std::ios::ate);
+    lz77.in.open(file_name , std::ios::binary |  std::ios::ate);
 
 
     if(!lz77.in.is_open()){
-        std::cout<<"Couldnt open the file";
+        throw std::runtime_error("Couldnt open the file");
     }
 
     uint64_t size = lz77.in.tellg();
-    if(size < 1) return 0;
+    if(size < 1)
+        throw std::runtime_error("File size too small to tokenize");
     lz77.in.seekg(0);
 
     lz77.ws.resize((SEARCH_SIZE+LOOkUP_SIZE), '\0');
@@ -101,8 +103,10 @@ int main(){
         }
     }
 
-}
+    
+    return tokens;
 
+}
 
 
 
