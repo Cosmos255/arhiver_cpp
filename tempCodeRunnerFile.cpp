@@ -1,1 +1,0 @@
- merge::sort(arr, [](int a, int b){return a > b;});
