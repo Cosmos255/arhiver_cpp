@@ -65,18 +65,29 @@ int main(int argc, char* argv[]){
     }
 */
 
-    auto lzed = lz77_token("file.example");
-    for(token &tk : lzed){
-        if(tk.type == match)
-            values[256]++;
-        else
-            values[(int)(tk.data)]++;
-    }
+   // auto lzed = lz77_token("file.example");
+  //  for(token &tk : lzed){
+  //      if(tk.type == match)
+ //           values[256]++;
+  //      else
+         //   values[(int)(tk.data)]++;
+  //  }
 
 
 
     //sort the array with merge sort doesnt return anything
-    merge::sort(unsorted_tree); //it doesnt return anything
+
+    std::vector<int> arr = {1, 2, 3 , 50 , 0, 5, 69, -5 };
+
+
+    merge::sort(arr, [](int a, int b){return (a < b); }); //it doesnt return anything
+
+    std::cout<<"\n";
+    for(auto &x : arr){
+        std::cout<<x<<"\n";
+    }
+
+    //merge::sort(unsorted_tree, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq > b->freq;}); //it doesnt return anything
 
     /*
     for(Tree *Tree : unsorted_tree){
