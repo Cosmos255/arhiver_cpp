@@ -5,11 +5,11 @@
 #include <vector>
 #include "utils.h"
 
-const int SEARCH_SIZE = 32*1000;
-const int LOOkUP_SIZE = 258;
-const int read_size = SEARCH_SIZE+LOOkUP_SIZE;
-const int min_match = 3;
-const int min_lookup = 10;
+constexpr int SEARCH_SIZE = 32*1000;
+constexpr int LOOkUP_SIZE = 258;
+constexpr int read_size = SEARCH_SIZE+LOOkUP_SIZE;
+constexpr int min_match = 3;
+constexpr int min_lookup = 10;
 
 
  
@@ -81,7 +81,7 @@ std::vector<token> lz77_token(std::string file_name){
 
     uint64_t read = lz77.in.gcount();
     lz77.notav = read;
-    tokens.emplace_back(lz77.ws.at(lz77.srch));
+    tokens.emplace_back(lz77.ws.at(lz77.srch)); //initialized the first letter
 
 
     while(lz77.look < lz77.notav){
@@ -103,7 +103,6 @@ std::vector<token> lz77_token(std::string file_name){
         }
     }
 
-    
     return tokens;
 
 }

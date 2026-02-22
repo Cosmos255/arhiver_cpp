@@ -14,6 +14,11 @@
 
 int values[257] = {0};
 
+int len[LOOkUP_SIZE] = {0};
+int dist[SEARCH_SIZE+1] = {0};
+
+
+
 //Tree root;
 
 std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
@@ -21,8 +26,12 @@ std::vector<std::unique_ptr<Tree>> unsorted_len;
 std::vector<std::unique_ptr<Tree>> unsorted_dist;
 
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
+void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
 
 int main(int argc, char* argv[]){
+
+    std::unordered_map<int, int> ctob; // key value ctob[key] == value / ctob.insert({key, value})
+
     unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
 
@@ -65,47 +74,45 @@ int main(int argc, char* argv[]){
     }
 */
 
-   // auto lzed = lz77_token("file.example");
-  //  for(token &tk : lzed){
-  //      if(tk.type == match)
- //           values[256]++;
-  //      else
-         //   values[(int)(tk.data)]++;
-  //  }
-
-
-
-    //sort the array with merge sort doesnt return anything
-
-    std::vector<int> arr = {1, 2, 3 , 50 , 0, 5, 69, -5 };
-
-
-    merge::sort(arr, [](int a, int b){return (a < b); }); //it doesnt return anything
-
-    std::cout<<"\n";
-    for(auto &x : arr){
-        std::cout<<x<<"\n";
+    auto lzed = lz77_token("file.example");
+        for(token &tk : lzed){
+            if(tk.type == match) values[256]++;
+            else values[(int)(tk.data)]++;
+            len[(int)(tk.len)]++;
+            dist[(int)(tk.dist)]++;
     }
 
-    //merge::sort(unsorted_tree, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq > b->freq;}); //it doesnt return anything
+    createUnsorted(values, 257, unsorted_tree);
+    createUnsorted(len, LOOkUP_SIZE, unsorted_len);
+    createUnsorted(dist, SEARCH_SIZE+1, unsorted_dist);
 
-    /*
-    for(Tree *Tree : unsorted_tree){
-        std::cout<<arr.freq<<"\t";
-    }
-    */
-    //building the treee
+    merge::sort(unsorted_tree, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
+    merge::sort(unsorted_len, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
+    merge::sort(unsorted_dist, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
+
 
     buildTree(unsorted_tree);
-    auto root = std::move(unsorted_tree.at(0));
+    buildTree(unsorted_len);
+    buildTree(unsorted_dist);
+
+    auto rootHuff = std::move(unsorted_tree.at(0));
+    auto rootLen = std::move(unsorted_len.at(0));
+    auto rootDist = std::move(unsorted_dist.at(0));
     unsorted_tree.clear();
-
-    std::cout<<"\n"<<root->left->data;
-
+    unsorted_len.clear();
+    unsorted_dist.clear();
 
 
     return 0;
 
+}   
+
+
+
+void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr){
+    for(int i=0; i<size; i++){
+        if(arr[i] >= 1) trr.push_back(std::make_unique<Tree>(i, values[i]));
+    }
 }
 
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree){

@@ -21,51 +21,18 @@ struct token{
 //The tree struct
 struct Tree{
     int freq = 0;
-    unsigned char data = '\0';
-
-    //Tree *left = nullptr;
-    //Tree *right = nullptr;
+    int data = '\0';
 
     std::unique_ptr<Tree> left;
     std::unique_ptr<Tree> right; 
 
     Tree() = default;
 
-    Tree(unsigned char val, int frc) : data(val), freq(frc){}
+    Tree(int val, int frc) : data(val), freq(frc){}
 };
 
 namespace merge{
 
-
- /*  void merge(std::vector<std::unique_ptr<Tree>> &arr, int left, int mid, int right){
-        int n1=mid-left+1;
-        int n2=right-mid;
-        std::vector<std::unique_ptr<Tree>> L(n1), R(n2);
-        for(int i=0; i < n1; i++){
-            L[i] = std::move(arr[left+i]);
-        }
-        for(int j=0; j < n2; j++){
-            R[j] = std::move(arr[mid+1+j]);
-        }
-        int p=0, k=0;
-        int pos = left;
-        while(p < n1 && k <n2){
-            if(L[p]->freq > R[k]->freq){
-                arr[pos++] = std::move(L[p++]);
-            }
-            else{
-                arr[pos++] = std::move(R[k++]);
-            }
-        }
-        while(p < n1){
-            arr[pos++] = std::move(L[p++]);
-        }
-        while(k < n2){
-            arr[pos++] = std::move(R[k++]);
-        }
-        return;
-    }
-*/
     
     template <typename T, typename Compare>
     void merge(std::vector<T> &arr, int left, int mid, int right, const Compare method){
@@ -84,7 +51,7 @@ namespace merge{
         int p=0, k=0;
         int pos = left;
         while(p < n1 && k <n2){
-            if(method(R[k],L[p] )){
+            if(method(L[p], R[k])){
                 arr[pos++] = std::move(L[p++]);
             }
             else{
