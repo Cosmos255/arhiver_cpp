@@ -31,6 +31,11 @@ struct Tree{
     Tree(int val, int frc) : data(val), freq(frc){}
 };
 
+struct bits{
+    uint64_t bits=0;
+    uint64_t length=0;
+};
+
 namespace merge{
 
     

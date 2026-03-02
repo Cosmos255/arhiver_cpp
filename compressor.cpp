@@ -30,7 +30,9 @@ void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr)
 
 int main(int argc, char* argv[]){
 
-    std::unordered_map<int, int> ctob; // key value ctob[key] == value / ctob.insert({key, value})
+    std::unordered_map<int, bits> ctob; // key value ctob[key] == value / ctob.insert({key, value})
+    //bits
+    //length
 
     unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
@@ -107,7 +109,7 @@ int main(int argc, char* argv[]){
 
 }   
 
-
+//left 0 right 1
 
 void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr){
     for(int i=0; i<size; i++){
@@ -116,6 +118,7 @@ void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr)
 }
 
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree){
+
     while(tree.size() > 1){
         auto right = std::move(tree.back());
         tree.pop_back();
@@ -129,3 +132,19 @@ void buildTree(std::vector<std::unique_ptr<Tree>> &tree){
         tree.push_back(std::move(parent));
     }
 }
+
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob, bits b, const int index){
+    b.bits = (b.bits<<1) | index;
+    b.length++;
+
+    if(t->left){
+        createBitcode(t->left, ctob, b, 0);
+    }
+    if(t->right){
+        createBitcode(t->right, ctob, b, 1);
+    }
+
+    if(!t->left && !t->right){
+        ctob[t->data] = b;
+    }
+};
