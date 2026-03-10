@@ -27,12 +27,18 @@ std::vector<std::unique_ptr<Tree>> unsorted_dist;
 
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
 void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob);
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob, bits b, const int index);
 
 int main(int argc, char* argv[]){
 
     std::unordered_map<int, bits> ctob; // key value ctob[key] == value / ctob.insert({key, value})
+    std::unordered_map<int, bits> ctol; 
+    std::unordered_map<int, bits> ctod;
     //bits
     //length
+
+    std::ifstream file;
 
     unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
@@ -50,7 +56,6 @@ int main(int argc, char* argv[]){
     /*
     
 
-    std::ifstream file;
     file.open("example.txt", std::ios::binary | std::ios::ate); //Open the file in binary mode and puts the pointer to the end of file with ate
     if(!file.is_open()) throw std::runtime_error("Couldnt open the target file"); //Checks if the file opened
     uint64_t size = file.tellg(); //Reads the size of the file
@@ -104,6 +109,34 @@ int main(int argc, char* argv[]){
     unsorted_len.clear();
     unsorted_dist.clear();
 
+    //outputing the raw data :3
+
+    createBitcode(rootHuff, ctob);
+    createBitcode(rootLen, ctol);
+    createBitcode(rootDist, ctod);
+
+
+
+    uint64_t outBuffer = 0;
+    int freebits = 64;
+
+    for(token &t : lzed){
+        if(t.type == match){
+            int disp = ctob[256].length
+
+            (outBuffer << disp)
+            (outBuffer<1) | ctob[256].length
+
+        }else{
+            freebits--;
+        }
+    }
+    
+
+
+
+    
+
 
     return 0;
 
@@ -137,6 +170,20 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
     b.bits = (b.bits<<1) | index;
     b.length++;
 
+    if(t->left){
+        createBitcode(t->left, ctob, b, 0);
+    }
+    if(t->right){
+        createBitcode(t->right, ctob, b, 1);
+    }
+
+    if(!t->left && !t->right){
+        ctob[t->data] = b;
+    }
+};
+
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob){
+    bits b;
     if(t->left){
         createBitcode(t->left, ctob, b, 0);
     }

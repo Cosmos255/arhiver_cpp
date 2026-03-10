@@ -103,6 +103,7 @@ std::vector<token> lz77_token(std::string file_name){
         }
     }
 
+    lz77.in.close();
     return tokens;
 
 }
