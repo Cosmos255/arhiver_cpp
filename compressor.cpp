@@ -118,17 +118,27 @@ int main(int argc, char* argv[]){
 
 
     uint64_t outBuffer = 0;
-    int freebits = 64;
+    int freebits=64;
 
     for(token &t : lzed){
         if(t.type == match){
-            int disp = ctob[256].length
-
-            (outBuffer << disp)
-            (outBuffer<1) | ctob[256].length
-
+            uint64_t disp = ctob[256].length;
+            //I forgot about the length and distnace :/
+            if(disp > freebits) flush();
+            if(disp < freebits){
+                outBuffer = (outBuffer<<disp) | ctob[256].bits;
+                freebits-=disp;
+            }
+        
         }else{
-            freebits--;
+            int chr = t.data;
+            uint64_t disp = ctob[chr].length;
+            if(disp > freebits) flush();
+            if(disp < freebits){
+                outBuffer = (outBuffer<<disp) | ctob[chr].bits;
+                freebits-=disp;   
+            }
+        
         }
     }
     
@@ -178,6 +188,11 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
     }
 
     if(!t->left && !t->right){
+        uint64_t rev=0;
+        for(int i=0; i < b.length ; i++){
+            rev = (rev<<1) | (b.bits & 1);
+            b.bits>>=1;
+        }
         ctob[t->data] = b;
     }
 };
@@ -192,6 +207,15 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
     }
 
     if(!t->left && !t->right){
+        uint64_t rev=0;
+        for(int i=0; i < b.length ; i++){
+            rev = (rev<<1) | (b.bits & 1);
+            b.bits>>=1;
+        }
         ctob[t->data] = b;
     }
 };
+
+void flush(uint64_t &buffer, int &freebits){
+
+}
