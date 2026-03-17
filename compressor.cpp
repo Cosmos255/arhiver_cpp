@@ -18,7 +18,7 @@ int len[LOOkUP_SIZE] = {0};
 int dist[SEARCH_SIZE+1] = {0};
 
 
-
+std::ofstream replace_this;
 //Tree root;
 
 std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
@@ -39,6 +39,7 @@ int main(int argc, char* argv[]){
     //length
 
     std::ifstream file;
+    
 
     unsorted_tree.reserve(256);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
@@ -124,7 +125,7 @@ int main(int argc, char* argv[]){
         if(t.type == match){
             uint64_t disp = ctob[256].length;
             //I forgot about the length and distnace :/
-            if(disp > freebits) flush();
+            if(disp > freebits) flush(outBuffer, freebits);
             if(disp < freebits){
                 outBuffer = (outBuffer<<disp) | ctob[256].bits;
                 freebits-=disp;
@@ -133,19 +134,15 @@ int main(int argc, char* argv[]){
         }else{
             int chr = t.data;
             uint64_t disp = ctob[chr].length;
-            if(disp > freebits) flush();
+            if(disp > freebits) flush(outBuffer, freebits);
             if(disp < freebits){
                 outBuffer = (outBuffer<<disp) | ctob[chr].bits;
-                freebits-=disp;   
+                freebits-=disp;
             }
-        
         }
     }
     
-
-
-
-    
+   
 
 
     return 0;
@@ -217,5 +214,8 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
 };
 
 void flush(uint64_t &buffer, int &freebits){
-
+    int bytes = (64-freebits) / 8;
+    replace_this.write((buffer>>(3-bytes)), bytes);
+    freebits+= bytes*8;
+    
 }
