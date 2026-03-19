@@ -146,12 +146,12 @@ void find_match(LZ77 &lz){
 
 
 void move_window(LZ77 &lz){
-    int dist = lz.match.second;
+    int dist = lz.match.first; //changed second with first
     if(lz.match.first == 0){
         dist = 1;
         tokens.emplace_back(lz.ws.at(lz.look%read_size));
     }else{
-        tokens.emplace_back(lz.match.second, lz.match.first);
+        tokens.emplace_back(lz.match.second, lz.match.first); //token(length, distance)
     }
 
     if(lz.look - lz.srch == SEARCH_SIZE){

@@ -12,13 +12,14 @@
 
 
 
-int values[257] = {0};
+int values[257] = {0}; //might be 258 i am not sure
 
 int len[LOOkUP_SIZE] = {0};
 int dist[SEARCH_SIZE+1] = {0};
 
 
-std::ofstream replace_this;
+std::ofstream replace_this; 
+
 //Tree root;
 
 std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
@@ -29,6 +30,7 @@ void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
 void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
 void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob);
 void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob, bits b, const int index);
+void flush(uint64_t &buffer, int &freebits);
 
 int main(int argc, char* argv[]){
 
@@ -130,6 +132,18 @@ int main(int argc, char* argv[]){
                 outBuffer = (outBuffer<<disp) | ctob[256].bits;
                 freebits-=disp;
             }
+            disp = ctod[t.dist].length;
+            if(disp > freebits) flush(outBuffer, freebits);
+            else{
+                outBuffer = (outBuffer<<disp) | ctod[t.dist].bits;
+                freebits-=disp;
+            }
+            disp = ctol[t.len].length;
+            if(disp > freebits) flush(outBuffer, freebits);
+            else{
+                outBuffer = (outBuffer<<disp) | ctol[t.len].bits;
+                freebits-=disp;
+            }
         
         }else{
             int chr = t.data;
@@ -141,7 +155,8 @@ int main(int argc, char* argv[]){
             }
         }
     }
-    
+
+    //mostly finished need to add the canonical and the magiccode
    
 
 
@@ -215,7 +230,7 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
 
 void flush(uint64_t &buffer, int &freebits){
     int bytes = (64-freebits) / 8;
-    replace_this.write((buffer>>(3-bytes)), bytes);
+    replace_this.write(reinterpret_cast<const char*>(buffer>>(8-bytes)*8), bytes);
     freebits+= bytes*8;
-    
+    buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
 }
