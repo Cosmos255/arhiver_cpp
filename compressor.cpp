@@ -11,11 +11,17 @@
 #include "lz77.h"
 
 
+constexpr int maxCodeValue = 257;
 
-int values[257] = {0}; //might be 258 i am not sure
 
-int len[LOOkUP_SIZE] = {0};
-int dist[SEARCH_SIZE+1] = {0};
+int values[maxCodeValue] = {0};
+//256 end of block
+
+
+
+
+int len[deflateBitLength] = {0};
+int dist[deflateBitDist] = {0};
 
 
 std::ofstream replace_this; 
@@ -26,10 +32,13 @@ std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branch
 std::vector<std::unique_ptr<Tree>> unsorted_len;
 std::vector<std::unique_ptr<Tree>> unsorted_dist;
 
+int lcode(int x);
+int dcode(int x);
 void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
 void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
-void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob);
-void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob, bits b, const int index);
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic);
+void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer);
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic, bits b, const int index);
 void flush(uint64_t &buffer, int &freebits);
 
 int main(int argc, char* argv[]){
@@ -43,7 +52,7 @@ int main(int argc, char* argv[]){
     std::ifstream file;
     
 
-    unsorted_tree.reserve(256);
+    unsorted_tree.reserve(257);
     //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
 
     if(argc==1){
@@ -85,16 +94,24 @@ int main(int argc, char* argv[]){
 */
 
     auto lzed = lz77_token("file.example");
-        for(token &tk : lzed){
+
+    for(token &tk : lzed){
             if(tk.type == match) values[256]++;
             else values[(int)(tk.data)]++;
+
+
+            len[lcode(tk.len)]++;
+            len[dcode(tk.dist)]++;
+
+            /*
             len[(int)(tk.len)]++;
             dist[(int)(tk.dist)]++;
+            */
     }
 
     createUnsorted(values, 257, unsorted_tree);
-    createUnsorted(len, LOOkUP_SIZE, unsorted_len);
-    createUnsorted(dist, SEARCH_SIZE+1, unsorted_dist);
+    createUnsorted(len, deflateBitDist, unsorted_len);
+    createUnsorted(dist, deflateBitDist, unsorted_dist);
 
     merge::sort(unsorted_tree, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
     merge::sort(unsorted_len, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
@@ -118,6 +135,7 @@ int main(int argc, char* argv[]){
     createBitcode(rootLen, ctol);
     createBitcode(rootDist, ctod);
 
+    
 
 
     uint64_t outBuffer = 0;
@@ -125,27 +143,60 @@ int main(int argc, char* argv[]){
 
     for(token &t : lzed){
         if(t.type == match){
+
+            writeBitcode(256, ctob, freebits, outBuffer);
+
+
+            /*
             uint64_t disp = ctob[256].length;
+
             //I forgot about the length and distnace :/
+
             if(disp > freebits) flush(outBuffer, freebits);
             if(disp < freebits){
                 outBuffer = (outBuffer<<disp) | ctob[256].bits;
                 freebits-=disp;
             }
+            */
+
+            writeBitcode(t.len, ctol, freebits, outBuffer);
+
+            int indx = lcode(t.dist);
+
+            int disp = lengthTable[indx].extraBits;
+
+            int code = (ctol[t.dist].bits << disp) | (t.dist - lengthTable[indx].baselength);
+
+
+
+            writeBitcode(t.dist, ctod, freebits, outBuffer);
+            
+            
+            
+
+/*
             disp = ctod[t.dist].length;
             if(disp > freebits) flush(outBuffer, freebits);
             else{
                 outBuffer = (outBuffer<<disp) | ctod[t.dist].bits;
                 freebits-=disp;
             }
+*/
+
+/*
             disp = ctol[t.len].length;
             if(disp > freebits) flush(outBuffer, freebits);
             else{
                 outBuffer = (outBuffer<<disp) | ctol[t.len].bits;
                 freebits-=disp;
             }
+*/
         
         }else{
+
+            writeBitcode(t.data, ctob, freebits, outBuffer);
+
+            /*
             int chr = t.data;
             uint64_t disp = ctob[chr].length;
             if(disp > freebits) flush(outBuffer, freebits);
@@ -153,11 +204,12 @@ int main(int argc, char* argv[]){
                 outBuffer = (outBuffer<<disp) | ctob[chr].bits;
                 freebits-=disp;
             }
+            */
         }
     }
 
-    //mostly finished need to add the canonical and the magiccode
-   
+    //mostly finished need to add the magiccode
+    
 
 
     return 0;
@@ -188,34 +240,36 @@ void buildTree(std::vector<std::unique_ptr<Tree>> &tree){
     }
 }
 
-void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob, bits b, const int index){
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic, bits b, const int index){
     b.bits = (b.bits<<1) | index;
     b.length++;
 
     if(t->left){
-        createBitcode(t->left, ctob, b, 0);
+        createBitcode(t->left, dic, b, 0);
     }
     if(t->right){
-        createBitcode(t->right, ctob, b, 1);
+        createBitcode(t->right, dic, b, 1);
     }
 
-    if(!t->left && !t->right){
+
+
+    if(!t->left && !t->right){      
         uint64_t rev=0;
         for(int i=0; i < b.length ; i++){
             rev = (rev<<1) | (b.bits & 1);
             b.bits>>=1;
         }
-        ctob[t->data] = b;
+        dic[t->data] = b;
     }
 };
 
-void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob){
+void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic){
     bits b;
     if(t->left){
-        createBitcode(t->left, ctob, b, 0);
+        createBitcode(t->left, dic, b, 0);
     }
     if(t->right){
-        createBitcode(t->right, ctob, b, 1);
+        createBitcode(t->right, dic, b, 1);
     }
 
     if(!t->left && !t->right){
@@ -224,13 +278,37 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &ctob
             rev = (rev<<1) | (b.bits & 1);
             b.bits>>=1;
         }
-        ctob[t->data] = b;
+        dic[t->data] = b;
     }
 };
+
+template <typename method>
+void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer){
+    uint64_t disp;
+
+    disp = map[index].length;
+    if(disp > freebits) flush(outBuffer, freebits);
+    outBuffer = (outBuffer<<disp) | map[index].bits;
+    freebits-=disp;
+    
+}
+
+void writeExtra(int value,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer){
+    uint64_t disp;
+    int indx = lcode(value);
+    disp = lengthTable[indx].extraBits;
+    if(disp > freebits) flush(outBuffer, freebits);
+    outBuffer = (outBuffer<<disp) | (value -lengthTable[indx].baselength);
+    freebits-=disp;
+}
+
+
 
 void flush(uint64_t &buffer, int &freebits){
     int bytes = (64-freebits) / 8;
-    replace_this.write(reinterpret_cast<const char*>(buffer>>(8-bytes)*8), bytes);
+    replace_this.write(reinterpret_cast<const char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
     freebits+= bytes*8;
-    buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
+    //good for stirng buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
+    buffer <<=bytes*8;
+    buffer >>=bytes*8;
 }

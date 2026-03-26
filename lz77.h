@@ -11,29 +11,10 @@ constexpr int read_size = SEARCH_SIZE+LOOkUP_SIZE;
 constexpr int min_match = 3;
 constexpr int min_lookup = 10;
 
-
+//need to add max limit to lenght is 258
  
 
 
-//Tryna make the lz77 and see if it works or if it will work
-/*
-IDEA
-
-LINKED LIST or quee for the sliding window
-
-[SEARCH][LOOKUP]
-32KB / 258bytes
-
-
-ring buffer
-
-sooo complicated -_-
-
-
-*/
-
-//I need to swtich to a stuct cuz so many pointer passing is
-//painfiull
 
 struct LZ77{
 
