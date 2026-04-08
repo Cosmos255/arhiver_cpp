@@ -1,13 +1,13 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <utility>
 
 constexpr int deflateBitLength = 29;
 
 constexpr int deflateBitDist = 30;
 
 enum type_e {lvalue, match};
-
 
 
 struct token{
@@ -100,6 +100,81 @@ namespace merge{
 
 }
 
+namespace binary_heap{
+
+    struct Node{
+        int value;
+        int freq;
+
+        Node(int val, int freq) : value(val), freq(freq){};
+    };
+
+    int left(int n){
+        return 2*n+1;
+    }
+    int right(int n){
+        return 2*n+2;
+    }
+
+
+    std::vector<Node> heap;
+
+    int parent = 0;
+    int size = 0;
+    int child;
+
+    void insert(int val, int freq){
+        heap.push_back({val, freq});
+        size++;
+        if(size == 1) return;
+        child = size-1;
+        if(child%2) parent = (child-1)/2;
+        else parent = (child-2)/2; 
+
+
+        while(heap[parent].freq > heap[child].freq && child > 0){
+            std::swap(heap[parent], heap[child]);
+            child = parent;
+            if(child%2) parent = (child-1)/2;
+            else parent = (child-2)/2;
+        }
+    }
+
+    Node extrt(){
+        Node rt = std::move(heap[0]);
+        size--;
+        heap[0] = heap[size];
+        heap.pop_back();
+
+
+        int lf = 1;
+        int rf = 2;
+        parent = 0;
+        child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
+
+        while(heap[parent].freq > heap[child].freq){
+            std::swap(heap[parent], heap[child]);
+
+            parent = child;
+
+            lf = left(parent); //add heap limit
+            rf = right(parent);
+            child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
+        }
+        return rt;
+    }
+
+}
+
+template<typename T>
+void swap(T &a, T &b){
+    T buffer = std::move(a);
+    a = std::move(b);
+    b = std::move(buffer);
+}
+
+
+
 struct bitLenghts{
     int baselength;
     int extraBits;
@@ -126,8 +201,6 @@ constexpr bitDist distTable[] = {
     {4097,11}, {6145,11}, {8193,12}, {12289,12}, {16385,13}, {24577,13}
 };
 
-
-
 //maybe replace with binary search
 
 int lcode(int x){
@@ -147,3 +220,35 @@ int dcode(int x){
         }
     }
 };
+
+
+const int code_symbol = 15; //0-15 for lenghts
+const int cp_previous_symbol = 16; // 3-6 times 2bits
+const int repeat_zero_symbol = 17; //3-10 times 3bits
+const int repeat_zero_long_symbol = 18; //11-13 7bits
+
+const int cp_previous = 3;
+const int repeat_zero = 3;
+const int repeat_zero_long = 11;
+
+
+/*
+HEADER
+
+BFINAL(1bit) 1 if last 0 otherwise
+BTYPE(2bits)
+    00 uncompresed
+    01 compressed with fixed Huff
+    10 comrpessed with dynamic huff
+    11 reserved/error
+
+*/
+
+
+//for deflate like there are only 2 tree literals lengths and distnace 
+
+//256 end of block
+
+//bruh huffman codes are MSB and the rest is LSB
+
+//last element in the tree needs to be checked lexicogrphicly so A gets 0 B 1

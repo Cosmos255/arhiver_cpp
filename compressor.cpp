@@ -12,19 +12,20 @@
 
 
 constexpr int maxCodeValue = 257;
+const int MAX_BITS = 15;
 
 
 int values[maxCodeValue] = {0};
 //256 end of block
 
-
+int bl_count[maxCodeValue];
 
 
 int len[deflateBitLength] = {0};
 int dist[deflateBitDist] = {0};
 
 
-std::ofstream replace_this; 
+std::ofstream replace_this("output.arhv"); 
 
 //Tree root;
 
@@ -38,6 +39,7 @@ void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
 void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
 void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic);
 void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer);
+void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len);
 void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic, bits b, const int index);
 void flush(uint64_t &buffer, int &freebits);
 
@@ -109,6 +111,8 @@ int main(int argc, char* argv[]){
             */
     }
 
+
+
     createUnsorted(values, 257, unsorted_tree);
     createUnsorted(len, deflateBitDist, unsorted_len);
     createUnsorted(dist, deflateBitDist, unsorted_dist);
@@ -140,6 +144,14 @@ int main(int argc, char* argv[]){
 
     uint64_t outBuffer = 0;
     int freebits=64;
+    //10 compresed with dynamic huffman
+
+    //need to output the dictiuonary and canonicals
+    std::string header;
+    header = 0b10; //comrpesion type
+    
+
+
 
     for(token &t : lzed){
         if(t.type == match){
@@ -161,16 +173,19 @@ int main(int argc, char* argv[]){
 
             writeBitcode(t.len, ctol, freebits, outBuffer);
 
+            writeExtra(t.len, freebits, outBuffer, 1);
+
+            /*
             int indx = lcode(t.dist);
 
             int disp = lengthTable[indx].extraBits;
 
             int code = (ctol[t.dist].bits << disp) | (t.dist - lengthTable[indx].baselength);
-
+            */  
 
 
             writeBitcode(t.dist, ctod, freebits, outBuffer);
-            
+            writeExtra(t.dist, freebits, outBuffer, 0);
             
             
 
@@ -210,6 +225,7 @@ int main(int argc, char* argv[]){
 
     //mostly finished need to add the magiccode
     
+    //10 compresed with dynamic huffman
 
 
     return 0;
@@ -282,7 +298,6 @@ void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic)
     }
 };
 
-template <typename method>
 void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer){
     uint64_t disp;
 
@@ -293,20 +308,33 @@ void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, ui
     
 }
 
-void writeExtra(int value,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer){
+void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len){
+    //forgot i need to add the extra bits so more code and methods for dcode abd lcode
     uint64_t disp;
-    int indx = lcode(value);
-    disp = lengthTable[indx].extraBits;
-    if(disp > freebits) flush(outBuffer, freebits);
-    outBuffer = (outBuffer<<disp) | (value -lengthTable[indx].baselength);
+    int indx;
+
+    if(len){
+        indx = lcode(value);
+        disp = lengthTable[indx].extraBits;
+        if(disp > freebits) flush(outBuffer, freebits);
+        outBuffer = (outBuffer<<disp) | (value - lengthTable[indx].baselength);
+
+    }else{
+        indx = dcode(value);
+        disp = distTable[indx].extraBits;
+        if(disp > freebits) flush(outBuffer, freebits);
+        outBuffer = (outBuffer<<disp) | (value - distTable[indx].basedist);
+    }
+
     freebits-=disp;
+
 }
 
-
-
 void flush(uint64_t &buffer, int &freebits){
-    int bytes = (64-freebits) / 8;
-    replace_this.write(reinterpret_cast<const char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
+
+    int bytes = (64-freebits) / 8; 
+    //replace_this.write(reinterpret_cast<char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
+    replace_this.write(reinterpret_cast<char*>(&buffer), bytes); //should work also this write bottom -> up buffer 
     freebits+= bytes*8;
     //good for stirng buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
     buffer <<=bytes*8;
