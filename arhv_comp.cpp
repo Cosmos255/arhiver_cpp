@@ -7,8 +7,8 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include "utils.h"
-#include "lz77.h"
+#include "utils.hpp"
+#include "lz77.hpp"
 
 
 const int MAX_BITS = 15;
@@ -24,26 +24,14 @@ int bl_count[maxCodeValue];
 int len[deflateBitLength] = {0};
 int dist[deflateBitDist] = {0};
 
-struct Node{
-    int data = '\0';
-    int freq;
-    int parent_freq = 0;
-    int length; //code length
-    int left = -1; //if -1 non existent
-    int right = -1;
 
-    Node(int val, int frc) : data(val), freq(frc){};
-};
-
-
-std::vector<Node> tree;
-
+std::vector<bn_heap::Node> tree;
 
 
 //can be replaced with a node struct which use indices instead of pointers so it will be 1 or 2 big arrays
 std::vector<std::unique_ptr<Tree>> tree_list;
 
-void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
+void createHeap(int *arr, int size, std::vector<bn_heap::Node> &tree);
 
 int main(){
 
@@ -65,25 +53,51 @@ int main(){
         dist[(int)(tk.dist)]++;
         */
     }
+    int arr_size = 257;
+    for(int i=0; i<arr_size; i++)
+    if(value_freq[i] >= 1) bn_heap::insert({i, value_freq[i]});
+    
+    buildTree(tree);
 
-    createUnsorted(value_freq, 257, tree);
-    merge::sort(tree_list, []( const Node &a, const Node &b ){return a.freq < b.freq;});
+    //merge::sort(tree_list, []( const bn_heap::Node &a, const bn_heap::Node &b ){return a.freq < b.freq;});
 
     
-
-
     return 0;
 }
 
-void createUnsorted(int *arr, int arr_size, std::vector<Node> &tree){
-    for(int i=0; i<arr_size; i++)
-    if(arr[i] >= 1) tree.push_back({i, arr[i]});
+
+void buildTree(std::vector<bn_heap::Node> &tree){
+    using namespace bn_heap;
+
+    Node parent;
+    Node left = extrt();
+    Node right = extrt();
+
+    while(left.value != -1 && right.value != -1){
+        tree.push_back(left);
+        tree.push_back(right);
+
+        parent.freq = left.freq + right.freq;
+        parent.left = tree.size()-2;
+        parent.right = tree.size()-1;
+
+        insert(parent);
+
+        left = extrt();
+        right = extrt();
+    }
+
+    if(parent.left == -1){
+        parent = left;
+    }
+    tree.push_back(parent); //root 
+
 }
 
 
+void createCodes(std::vector<bn_heap::Node> &tree){
 
-
-
+}
 
 /*
 void BuildTree(std::vector<Node> &tree){

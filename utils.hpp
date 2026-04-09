@@ -7,20 +7,6 @@ constexpr int deflateBitLength = 29;
 
 constexpr int deflateBitDist = 30;
 
-enum type_e {lvalue, match};
-
-
-struct token{
-    type_e type = lvalue;
-    unsigned char data;
-    int len;
-    int dist;
-    
-    token() = default;
-    token(int l, int d) : len(l), dist(d), type(match) {};
-    token(unsigned char d) : data(d){};
-    
-};
 
 //The tree struct
 struct Tree{
@@ -39,6 +25,25 @@ struct bits{
     uint64_t bits=0;
     uint64_t length=0;
 };
+
+namespace bn_heap{
+    struct Node{
+        int value;
+        int freq;
+        int left = -1; 
+        int right = -1;
+        //left and right are for the huffman tree
+
+        Node() = default;
+        Node(int val, int freq) : value(val), freq(freq){};
+    };
+
+    void insert(Node nd);
+
+    Node extrt();
+
+};
+
 
 namespace merge{
 
@@ -98,80 +103,8 @@ namespace merge{
 
 
 
-}
+};
 
-namespace binary_heap{
-
-    struct Node{
-        int value;
-        int freq;
-
-        Node(int val, int freq) : value(val), freq(freq){};
-    };
-
-    int left(int n){
-        return 2*n+1;
-    }
-    int right(int n){
-        return 2*n+2;
-    }
-
-
-    std::vector<Node> heap;
-
-    int parent = 0;
-    int size = 0;
-    int child;
-
-    void insert(int val, int freq){
-        heap.push_back({val, freq});
-        size++;
-        if(size == 1) return;
-        child = size-1;
-        if(child%2) parent = (child-1)/2;
-        else parent = (child-2)/2; 
-
-
-        while(heap[parent].freq > heap[child].freq && child > 0){
-            std::swap(heap[parent], heap[child]);
-            child = parent;
-            if(child%2) parent = (child-1)/2;
-            else parent = (child-2)/2;
-        }
-    }
-
-    Node extrt(){
-        Node rt = std::move(heap[0]);
-        size--;
-        heap[0] = heap[size];
-        heap.pop_back();
-
-
-        int lf = 1;
-        int rf = 2;
-        parent = 0;
-        child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
-
-        while(heap[parent].freq > heap[child].freq){
-            std::swap(heap[parent], heap[child]);
-
-            parent = child;
-
-            lf = left(parent); //add heap limit
-            rf = right(parent);
-            child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
-        }
-        return rt;
-    }
-
-}
-
-template<typename T>
-void swap(T &a, T &b){
-    T buffer = std::move(a);
-    a = std::move(b);
-    b = std::move(buffer);
-}
 
 
 
@@ -189,6 +122,7 @@ constexpr bitLenghts lengthTable[] = {
     {131,5}, {163,5}, {195,5}, {227,5},
     {258,0}
 };
+
 struct bitDist{
     int basedist;
     int extraBits;

@@ -1,9 +1,7 @@
-#pragma once
 #include <iostream>
-#include <string>
 #include <fstream>
-#include <vector>
-#include "utils.h"
+#include "utils.hpp"
+#include "lz77.hpp"
 
 constexpr int SEARCH_SIZE = 32*1000;
 constexpr int LOOkUP_SIZE = 258;
@@ -14,7 +12,7 @@ constexpr int min_lookup = 10;
 //need to add max limit to lenght is 258
  
 
-
+std::vector<token> tokens;
 
 struct LZ77{
 
@@ -32,8 +30,6 @@ struct LZ77{
     //put 0 0
 
 };
-
-std::vector<token> tokens;
 
 void find_match(LZ77 &lz);
 void move_window(LZ77 &lz);
@@ -90,7 +86,6 @@ std::vector<token> lz77_token(std::string file_name){
 }
 
 
-
 void find_match(LZ77 &lz){
     lz.match.first = 0;
     lz.match.second = 0;
@@ -125,7 +120,6 @@ void find_match(LZ77 &lz){
 }
 
 
-
 void move_window(LZ77 &lz){
     int dist = lz.match.first; //changed second with first
     if(lz.match.first == 0){
@@ -142,7 +136,6 @@ void move_window(LZ77 &lz){
         lz.look+=dist;
     }
 }
-
 
 //might remove read from lz 77 struct
 void fill_window(uint64_t &read, LZ77 &lz){
