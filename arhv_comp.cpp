@@ -12,24 +12,27 @@
 
 
 const int MAX_BITS = 15;
-constexpr int maxCodeValue = 257;
 
-int value_freq[maxCodeValue] = {0};
-
-
-int bl_count[maxCodeValue];
+constexpr int maxCodeValue = 286;
+constexpr int maxDistValue = 30;
 
 
+//int code_len[maxCodeValue] = {0};
+int code_len[maxCodeValue] = {0};
+int dist_len[maxDistValue] = {0};
 
-int len[deflateBitLength] = {0};
-int dist[deflateBitDist] = {0};
+
+int code_freq[maxCodeValue] = {0};
+int dist_freq[maxDistValue] = {0};
+
+
 
 
 std::vector<bn_heap::Node> tree;
 
+std::unordered_map<int, uint64_t> codes; // the map for the literals and lengths
+std::unordered_map<int, uint64_t> dist; //the map for the distances
 
-//can be replaced with a node struct which use indices instead of pointers so it will be 1 or 2 big arrays
-std::vector<std::unique_ptr<Tree>> tree_list;
 
 void createHeap(int *arr, int size, std::vector<bn_heap::Node> &tree);
 
@@ -40,33 +43,34 @@ int main(){
     auto lzed = lz77_token("file.example");
     
     for(token &tk : lzed){
-        if(tk.type == match) value_freq[256]++;
-        else value_freq[(int)(tk.data)]++;
+        if(tk.type == match){
+            code_freq[257 + lcode(tk.len)]++;
+            dist_freq[dcode(tk.dist)]++;
+        }
+        else code_freq[(int)(tk.data)]++;
 
-        /*
-        //for dynamic huffman
-        len[lcode(tk.len)]++;
-        dist[dcode(tk.dist)]++;
-        */
-        /*
-        len[(int)(tk.len)]++;
-        dist[(int)(tk.dist)]++;
-        */
     }
-    int arr_size = 257;
-    for(int i=0; i<arr_size; i++)
-    if(value_freq[i] >= 1) bn_heap::insert({i, value_freq[i]});
-    
-    buildTree(tree);
 
-    //merge::sort(tree_list, []( const bn_heap::Node &a, const bn_heap::Node &b ){return a.freq < b.freq;});
-
+    for(int i=0; i<maxCodeValue; i++)
+    if(code_freq[i]) bn_heap::insert({i, code_freq[i]});
+    buildTree();
+    createCodes(code_len, codes);
+    tree.clear();
+    bn_heap::clear();
     
+    for(int i=0; i<maxDistValue; i++)
+    if(dist_freq[i]) bn_heap::insert({i, dist_freq[i]});
+    buildTree();
+    createCodes(dist_len, dist);
+    tree.clear();
+
+    //Creating the header and blocks
+
     return 0;
 }
 
 
-void buildTree(std::vector<bn_heap::Node> &tree){
+void buildTree(){
     using namespace bn_heap;
 
     Node parent;
@@ -95,23 +99,51 @@ void buildTree(std::vector<bn_heap::Node> &tree){
 }
 
 
-void createCodes(std::vector<bn_heap::Node> &tree){
+void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len=0, int i){
 
-}
-
-/*
-void BuildTree(std::vector<Node> &tree){
-    int i = tree.size()-1;
-
-    while(i){
-        tree[i-2].left = i-1;
-        tree[i-2].right = i;
-        if(i>=2) i-=2;
-        else{
-            tree[0].right = 1;
-        }
+    len++;
+    if(tree[i].left){
+        createLen(val_len, len_arr, len, tree[i].left);
     }
-
+    if(tree[i].right){
+        createLen(val_len, len_arr, len, tree[i].right);
+    }
+    if(tree[i].left == -1 && tree[i].right == -1){
+        len_arr[tree[i].value] = len;
+        val_len.push_back({tree[i].value, len});
+    }
+    
 }
-*/
-///greedy recursiv pentru fiecare cautam cel mai mic destul de usor +- idk coaie
+
+
+void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
+    std::vector<bits> value_len;
+    
+    createLen(value_len, len_arr, 0, tree.size()-1); //last element is root
+
+    merge::sort(value_len,[](const bits &a, const bits &b){return a.length < b.length;}); //ascending
+
+    int i=1;
+    while(i < value_len.size()){
+        if(value_len[i-1].length == value_len[i].length){
+            if(value_len[i-1].value > value_len[i].value) std::swap(value_len[i], value_len[i-1]);
+        }
+        i++;
+    } //sorting alphabeticly
+
+    //building the codes
+
+    
+    map[value_len[0].value] = 0;
+    int prev_length = value_len[0].length;
+    uint32_t code = 0;
+
+    int i = 1;
+
+    while(i < value_len.size()){
+        bits current = value_len[i];
+        code++;
+        if(current.length > prev_length) code<<= current.length-prev_length;
+        map[current.value] = code;
+    }
+}

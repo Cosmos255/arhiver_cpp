@@ -38,7 +38,9 @@ void insert(Node nd){
     }
 }
 
-
+void clear(){
+    heap.clear();
+}
 
 
 Node extrt(){

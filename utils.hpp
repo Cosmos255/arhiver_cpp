@@ -3,32 +3,17 @@
 #include <memory>
 #include <utility>
 
-constexpr int deflateBitLength = 29;
-
-constexpr int deflateBitDist = 30;
 
 
-//The tree struct
-struct Tree{
-    int freq = 0;
-    int data = '\0';
-
-    std::unique_ptr<Tree> left;
-    std::unique_ptr<Tree> right; 
-
-    Tree() = default;
-
-    Tree(int val, int frc) : data(val), freq(frc){}
-};
 
 struct bits{
-    uint64_t bits=0;
-    uint64_t length=0;
+    uint32_t value = 0;
+    uint32_t length= 0;
 };
 
 namespace bn_heap{
     struct Node{
-        int value;
+        uint32_t value;
         int freq;
         int left = -1; 
         int right = -1;
@@ -39,6 +24,7 @@ namespace bn_heap{
     };
 
     void insert(Node nd);
+    void clear();
 
     Node extrt();
 
@@ -105,14 +91,13 @@ namespace merge{
 
 };
 
-
-
-
 struct bitLenghts{
     int baselength;
     int extraBits;
 };
 
+//remember to add 257+index for the code
+//extra bits are MSB 
 constexpr bitLenghts lengthTable[] = {
     {3,0}, {4,0}, {5,0}, {6,0}, {7,0}, {8,0}, {9,0}, {10,0},
     {11,1}, {13,1}, {15,1}, {17,1},
@@ -136,6 +121,9 @@ constexpr bitDist distTable[] = {
 };
 
 //maybe replace with binary search
+constexpr int deflateBitLength = 29;
+
+constexpr int deflateBitDist = 30;
 
 int lcode(int x){
     for(int i=0; i<deflateBitLength; i++){
@@ -175,6 +163,13 @@ BTYPE(2bits)
     01 compressed with fixed Huff
     10 comrpessed with dynamic huff
     11 reserved/error
+
+
+000
+
+literal bytes 0-255
+256 end of block
+257-285 lengthcode
 
 */
 
