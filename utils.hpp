@@ -125,23 +125,9 @@ constexpr int deflateBitLength = 29;
 
 constexpr int deflateBitDist = 30;
 
-int lcode(int x){
-    for(int i=0; i<deflateBitLength; i++){
-        if(x < lengthTable[i].baselength){
-            i--;
-            return i;
-        }
-    }
-};
+int lcode(int x);
 
-int dcode(int x){
-    for(int i=0; i<deflateBitDist; i++){
-        if(x < distTable[i].basedist){
-            i--;
-            return i;
-        }
-    }
-};
+int dcode(int x);
 
 
 const int code_symbol = 15; //0-15 for lenghts

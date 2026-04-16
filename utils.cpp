@@ -70,3 +70,22 @@ Node extrt(){
     return rt;
 }
 
+int lcode(int x){
+    for(int i=0; i<deflateBitLength; i++){
+        if(x < lengthTable[i].baselength){
+            i--;
+            return i;
+        }
+    }
+    return -1;
+};
+
+int dcode(int x){
+    for(int i=0; i<deflateBitDist; i++){
+        if(x < distTable[i].basedist){
+            i--;
+            return i;
+        }
+    }
+    return -1;
+};

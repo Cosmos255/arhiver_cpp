@@ -89,16 +89,19 @@ std::vector<token> lz77_token(std::string file_name){
 void find_match(LZ77 &lz){
     lz.match.first = 0;
     lz.match.second = 0;
-    uint64_t distance = 3;
+    uint64_t distance = 1;
 
     while(lz.look >= lz.srch+distance){
 
         int length = 0;
         uint64_t hash = create_hash(lz.look, lz);
         uint64_t s_hash = create_hash(lz.look-distance, lz);
-        length = 2; //need to do some searhing for lenght it might need to be set to 3
 
-        while(length<distance && lz.look+length < lz.notav){ // need to modify the code so we remove lenght<distance
+        while(lz.look+length < lz.notav){ // need to modify the code so we remove
+            if(lz.ws.at(lz.look+length) == lz.ws.at(lz.look-distance+length)) length++;
+            else break;
+            
+            /*
             if(hash == s_hash){
                 length++;
 
@@ -106,10 +109,10 @@ void find_match(LZ77 &lz){
                 break;
             }
 
-            hash = create_hash(hash, lz.look+length, lz);
+           hash = create_hash(hash, lz.look+length, lz);
             s_hash = create_hash(s_hash, lz.look-distance+length, lz); // I think these two lines work who knows
+        */
         }
-
         if((length > 2) && (length > lz.match.second)){
             lz.match.first = distance;
             lz.match.second = length;
@@ -119,21 +122,19 @@ void find_match(LZ77 &lz){
 
 }
 
-
 void move_window(LZ77 &lz){
-    int dist = lz.match.first; //changed second with first
-    if(lz.match.first == 0){
-        dist = 1;
+    int length = lz.match.second; //changed second with first
+    if(length == 0){
+        length = 1;
         tokens.emplace_back(lz.ws.at(lz.look%read_size));
     }else{
-        tokens.emplace_back(lz.match.second, lz.match.first); //token(length, distance)
+        tokens.emplace_back(length , lz.match.first); //token(length, distance)
     }
 
-    if(lz.look - lz.srch == SEARCH_SIZE){
-        lz.srch+=dist;
-        lz.look+=dist;
-    }else{
-        lz.look+=dist;
+    lz.look+=length;
+    //can be replace with lz.srch = std::max(0, lz.look-SEARCH_SIZE);
+    if(lz.look - lz.srch >= SEARCH_SIZE){ 
+        lz.srch = lz.look-SEARCH_SIZE;
     }
 }
 
