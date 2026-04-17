@@ -98,7 +98,7 @@ void find_match(LZ77 &lz){
         uint64_t s_hash = create_hash(lz.look-distance, lz);
 
         while(lz.look+length < lz.notav){ // need to modify the code so we remove
-            if(lz.ws.at(lz.look+length) == lz.ws.at(lz.look-distance+length)) length++;
+            if(lz.ws.at((lz.look+length)%read_size) == lz.ws.at((lz.look-distance+length)%read_size)) length++;
             else break;
             
             /*
