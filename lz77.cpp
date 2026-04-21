@@ -34,8 +34,6 @@ struct LZ77{
 void find_match(LZ77 &lz);
 void move_window(LZ77 &lz);
 void fill_window(uint64_t &read, LZ77 &lz);
-uint64_t create_hash(uint64_t pos1, LZ77 &lz);
-uint64_t create_hash(uint64_t hash, int pos_nxt, LZ77 &lz);
 
 std::vector<token> lz77_token(std::string file_name){
     LZ77 lz77;
@@ -94,24 +92,10 @@ void find_match(LZ77 &lz){
     while(lz.look >= lz.srch+distance){
 
         int length = 0;
-        uint64_t hash = create_hash(lz.look, lz);
-        uint64_t s_hash = create_hash(lz.look-distance, lz);
 
         while(lz.look+length < lz.notav){ // need to modify the code so we remove
             if(lz.ws.at((lz.look+length)%read_size) == lz.ws.at((lz.look-distance+length)%read_size)) length++;
             else break;
-            
-            /*
-            if(hash == s_hash){
-                length++;
-
-            }else{
-                break;
-            }
-
-           hash = create_hash(hash, lz.look+length, lz);
-            s_hash = create_hash(s_hash, lz.look-distance+length, lz); // I think these two lines work who knows
-        */
         }
         if((length > 2) && (length > lz.match.second)){
             lz.match.first = distance;
@@ -144,14 +128,4 @@ void fill_window(uint64_t &read, LZ77 &lz){
     lz.in.read(&lz.ws.at(lz.notav%read_size), fill_size);
     read = lz.in.gcount();
     lz.notav+=read;
-}
-
-uint64_t create_hash(uint64_t pos1, LZ77 &lz){
-    return (lz.ws.at(pos1%read_size) << 16) |
-        (lz.ws.at((pos1+1)%read_size) << 8)|
-        (lz.ws.at((pos1+2)%read_size));
-}
-
-uint64_t create_hash(uint64_t hash, int pos_nxt, LZ77 &lz){
-    return ((hash & 0xFFFF) << 8) | lz.ws.at(pos_nxt%read_size);
 }

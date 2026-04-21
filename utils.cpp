@@ -1,11 +1,6 @@
 #include "utils.hpp"
 
-struct Node{
-    int value;
-    int freq;
-
-    Node(int val, int freq) : value(val), freq(freq){};
-};
+using namespace bn_heap;
 
 int left(int n){
     return 2*n+1;
@@ -21,7 +16,7 @@ int parent = 0;
 int size = 0;
 int child;
 
-void insert(Node nd){
+void bn_heap::insert(Node nd){
     heap.push_back(nd);
     size++;
     if(size == 1) return;
@@ -38,12 +33,12 @@ void insert(Node nd){
     }
 }
 
-void clear(){
+void bn_heap::clear(){
     heap.clear();
 }
 
 
-Node extrt(){
+Node bn_heap::extrt(){
     if(size==0) return {-1 , 0};
     Node rt = std::move(heap[0]);
     size--;

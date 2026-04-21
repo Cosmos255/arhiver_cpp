@@ -20,19 +20,22 @@ constexpr int maxDistValue = 30;
 //int code_len[maxCodeValue] = {0};
 int code_len[maxCodeValue] = {0};
 int dist_len[maxDistValue] = {0};
-
+int CCL_len[19] = {0};
 
 int code_freq[maxCodeValue] = {0};
 int dist_freq[maxDistValue] = {0};
+int CCL_freq[19]=  {0};
 
-
+int HLIT;
+int HDIST;
+int HCLEN;
 
 
 std::vector<bn_heap::Node> tree;
 
 std::unordered_map<int, uint64_t> codes; // the map for the literals and lengths
 std::unordered_map<int, uint64_t> dist; //the map for the distances
-
+std::unordered_map<int, uint64_t> CCL; 
 
 void createHeap(int *arr, int size, std::vector<bn_heap::Node> &tree);
 
@@ -52,19 +55,39 @@ int main(){
     }
 
     for(int i=0; i<maxCodeValue; i++)
-    if(code_freq[i]) bn_heap::insert({i, code_freq[i]});
+    if(code_freq[i]){
+        bn_heap::insert({i, code_freq[i]});
+        HLIT++;
+    } 
     buildTree();
     createCodes(code_len, codes);
     tree.clear();
     bn_heap::clear();
     
     for(int i=0; i<maxDistValue; i++)
-    if(dist_freq[i]) bn_heap::insert({i, dist_freq[i]});
+    if(dist_freq[i]){
+        bn_heap::insert({i, dist_freq[i]});
+        HDIST++;
+    } 
     buildTree();
     createCodes(dist_len, dist);
     tree.clear();
+    bn_heap::clear();
+
+
+    
 
     //Creating the header and blocks
+    
+    HLIT-=257;
+    HDIST-=1;
+
+    std::string buffer;
+
+    uint64_t buffer = 0b010;
+
+
+
 
     return 0;
 }
