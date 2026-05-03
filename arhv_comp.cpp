@@ -10,6 +10,13 @@
 #include "utils.hpp"
 #include "lz77.hpp"
 
+/*
+NOTE: using a smaller buffer might reduce how much memory is allocated 
+as we can switch to uint32t instead of 64
+
+
+
+*/
 
 const int MAX_BITS = 15;
 
@@ -99,9 +106,8 @@ int main(){
 
     //std::string buffer;
 
-    int buffer_space = 64;
-    uint64_t buffer = 0b010;
-    buffer_space-=3;
+    uint64_t buffer = 0;
+    int bitpos = 0; //max is 64
 
 
     bool compresed = true;
@@ -109,53 +115,46 @@ int main(){
     bool lastblock = true;
 
     if (lastblock) buffer |= 1;
-    buffer<<=2;
+    bitpos++;
+
     if(compresed){
-        if(dynamicHuffman) buffer |= 0b01; //reversed cuz of LSB
-        else buffer |= 0b10; //lsb
+        if(dynamicHuffman) buffer |= (0b10 << bitpos); 
+        else buffer |= (0b01 << bitpos); 
     }else{
-        buffer|= 0b11;
+        buffer |= (0b11 << bitpos); //error
     }
+    bitpos+=2;
+
+
+    //add static cast uint64t to all codes that are written into the buffer
+    //cuz its done in int space not uint
+
 
     //HLIT 5bits
 
-    buffer-=5;
-    for(int i=0; i<5; i++){
-        buffer<<=1;
-        buffer|= (HLIT & 0b1);
-        HLIT>>=1;
-    }
+    buffer |= (static_cast<uint64_t>(HLIT) << bitpos);
+    bitpos+=5;
+
 
     //HDIST 5 bits
 
-    buffer-=5;
-    for(int i=0; i<5; i++){
-        buffer<<=1;
-        buffer|= (HDIST & 0b1);
-        HDIST>>=1;
-    }
+    buffer |= (static_cast<uint64_t>(HDIST) << bitpos);
+    bitpos+=5;
 
     //HCLEN 4 bits
 
-    buffer-=4;
-    for(int i=0; i<5; i++){
-        buffer<<=1;
-        buffer|= (HCLEN & 0b1);
-        HCLEN>>=1;
-    }
+    buffer |= (static_cast<uint64_t>(HCLEN) << bitpos);
+    bitpos+=4;
 
-
-    int CCL_order[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 
     //CCL output
 
     for(int i=0; i<19; i++){
-        int code = CCL[CCL_order[i]];
-        for(int c=0; c<CCL_len[CCL_order[i]]; c++){
-            buffer<<=1;
-            buffer|= code & 0b1;
-            code>>=1;
-        }
+        uint64_t code = revCodes(CCL[CCL_order[i]], CCL_len[CCL_order[i]]); //maybe use key=CCL_order[i]
+
+        buffer|=(code << bitpos);
+        bitpos+=CCL_len[CCL_order[i]];
+
     }
 
 
@@ -167,7 +166,7 @@ int main(){
     for(int i=0; i<maxCodeValue; i++){
         if(prev == code_len[i]) prev_count++;
         else{
-            outputDictionary(prev, prev_count, buffer);
+            outputDictionary(prev, prev_count, buffer, bitpos);
             prev = code_len[i];
         }
     }
@@ -175,17 +174,30 @@ int main(){
     for(int i=0; i<maxDistValue; i++){
         if(prev==dist_len[i]) prev_count++;
         else{ 
-            outputDictionary(prev, prev_count, buffer);
+            outputDictionary(prev, prev_count, buffer, bitpos);
             prev = code_len[i];
             continue;
         }
-        if(i == maxDistValue-1) outputDictionary(prev, prev_count, buffer); //for the dist bc if the last one is a match it wont output the last ones;
+        if(i == maxDistValue-1) outputDictionary(prev, prev_count, buffer, bitpos); //for the dist bc if the last one is a match it wont output the last ones;
     }
 
 
     //outputting the compressed data
 
+    for(token &t : lzed){
+        if(t.type == match){
+            writeBitcode(t.len, codes, );
+            writeExtra();
+            writeBitcode();
+            writeExtra();
+        }
+        else{
+            writeBitcode();
+        }
+    }
 
+    writeBitcode();
+    writeExtra();
 
 
 
@@ -196,7 +208,7 @@ int main(){
     //now its decompresser time
 }
 
-void outputDictionary(const int prev, int &prev_count, uint64_t &buffer){
+void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int bitpos){
     outputCCLCode(prev, prev_count, buffer);
 
     if(prev > 0) while(prev_count >= 3) outputCCLCode(16, prev_count, buffer);    
@@ -248,10 +260,11 @@ void outputCCLCode(int key, int &count, uint64_t &buffer){
         buffer|= (code & 1);
         code>>=1;
     }
-
-    buffer<<=extr_len;
-    buffer|=extra;
-
+    for(int i=1; i<=extr_len; i++){
+        buffer<<=i;
+        buffer|= extra & 0b1;
+        extra>>=1;
+    }
 }
 
 void buildTree(){
@@ -395,6 +408,67 @@ void createCCL_freq(){
         }
 
     }
+}
 
-    
+void writeBitcode(uint32_t code, int len, strctBuff buf){
+    if(buf.bitpose + len > 64) flush();
+    buf.buffer|= (code<<buf.bitpose);
+    buf.bitpose+=len;
+}
+
+uint64_t revCodes(uint64_t code, int len){
+    uint64_t rev=0;
+    while (len--)
+    {
+        rev|= (code & 0b1);
+        code>>=1;
+    }
+    return rev;
+}
+
+
+
+//Rewrite/fix writeBitcode writeExtra and flush
+
+void writeBitcode(int index, std::unordered_map<int, uint64_t> map, int &freebits, uint64_t &outBuffer){    
+    uint64_t disp;
+
+    disp = map[index].length;
+    if(disp > freebits) flush(outBuffer, freebits);
+    outBuffer = (outBuffer<<disp) | map[index].bits;
+    freebits-=disp;
+        
+    }
+
+void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len){
+    //forgot i need to add the extra bits so more code and methods for dcode abd lcode
+    uint64_t disp;
+    int indx;
+
+    if(len){
+        indx = lcode(value);
+        disp = lengthTable[indx].extraBits;
+        if(disp > freebits) flush(outBuffer, freebits);
+        outBuffer = (outBuffer<<disp) | (value - lengthTable[indx].baselength);
+
+    }else{
+        indx = dcode(value);
+        disp = distTable[indx].extraBits;
+        if(disp > freebits) flush(outBuffer, freebits);
+        outBuffer = (outBuffer<<disp) | (value - distTable[indx].basedist);
+    }
+
+    freebits-=disp;
+
+}
+
+void flush(uint64_t &buffer, int &freebits){
+
+    int bytes = (64-freebits) / 8; 
+    //replace_this.write(reinterpret_cast<char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
+    replace_this.write(reinterpret_cast<char*>(&buffer), bytes); //should work also this write bottom -> up buffer 
+    freebits+= bytes*8;
+    //good for stirng buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
+    buffer <<=bytes*8;
+    buffer >>=bytes*8;
 }
