@@ -18,6 +18,8 @@ as we can switch to uint32t instead of 64
 
 */
 
+using CodeSize = uint64_t; //just for testing rn
+
 const int MAX_BITS = 15;
 
 constexpr int maxCodeValue = 286;
@@ -43,6 +45,8 @@ std::unordered_map<int, uint64_t> codes; // the map for the literals and lengths
 std::unordered_map<int, uint64_t> dist; //the map for the distances
 std::unordered_map<int, uint64_t> CCL; //these 3 maps can be replaced with 3 simple arrays as the amount of values is fixed
 
+
+std::ofstream out("example.arhv", std::ios::binary);
 
 int main(){
 
@@ -160,10 +164,10 @@ int main(){
 
     //Dictionay output with ccl
 
-    int prev = -1;
+    int prev = code_len[0];
     int prev_count = 0;
 
-    for(int i=0; i<maxCodeValue; i++){
+    for(int i=1; i<maxCodeValue; i++){
         if(prev == code_len[i]) prev_count++;
         else{
             outputDictionary(prev, prev_count, buffer, bitpos);
@@ -175,7 +179,7 @@ int main(){
         if(prev==dist_len[i]) prev_count++;
         else{ 
             outputDictionary(prev, prev_count, buffer, bitpos);
-            prev = code_len[i];
+            prev = dist_len[i];
             continue;
         }
         if(i == maxDistValue-1) outputDictionary(prev, prev_count, buffer, bitpos); //for the dist bc if the last one is a match it wont output the last ones;
@@ -186,20 +190,17 @@ int main(){
 
     for(token &t : lzed){
         if(t.type == match){
-            writeBitcode(t.len, codes, );
-            writeExtra();
-            writeBitcode();
-            writeExtra();
+            writeBitcode(codes[t.len], code_len[t.len], buffer, bitpos); //i think it works but i am not sure
+            writeExtra(t.len, buffer, bitpos, true);
+            writeBitcode(dist[t.dist], dist_len[t.dist], buffer, bitpos);
+            writeExtra(t.dist, buffer, bitpos, false);
         }
         else{
-            writeBitcode();
+            writeBitcode(codes[t.data], code_len[t.data], buffer, bitpos);
         }
     }
 
-    writeBitcode();
-    writeExtra();
-
-
+    writeBitcode(codes[256], code_len[256], buffer, bitpos); //this should be it i think
 
     return 0;
 
@@ -208,29 +209,28 @@ int main(){
     //now its decompresser time
 }
 
-void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int bitpos){
-    outputCCLCode(prev, prev_count, buffer);
+void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos){
+    outputCCLCode(prev, prev_count, buffer, bitpos);
 
-    if(prev > 0) while(prev_count >= 3) outputCCLCode(16, prev_count, buffer);    
-
+    if(prev > 0) while(prev_count >= 3) outputCCLCode(16, prev_count, buffer, bitpos);    
 
     if(prev == 0){
         while(prev_count > 10){
-            outputCCLCode(18, prev_count, buffer);
+            outputCCLCode(18, prev_count, buffer, bitpos);
         }
         while (prev_count < 11 && prev_count >= 3){
-            outputCCLCode(17, prev_count, buffer);
+            outputCCLCode(17, prev_count, buffer, bitpos);
         }
     }
 
     while(prev_count--){
-        outputCCLCode(prev, prev_count, buffer);
+        outputCCLCode(prev, prev_count, buffer, bitpos);
     }
 
     prev_count = 0;
 }
 
-void outputCCLCode(int key, int &count, uint64_t &buffer){
+void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
     int extra = 0;
     int extr_len = 2;
     uint64_t code;
@@ -253,18 +253,14 @@ void outputCCLCode(int key, int &count, uint64_t &buffer){
     default:
         break;
     }
-    code = CCL[key];
+    code = revCodes(CCL[key], CCL_len[key]);
 
-    for(int i=0; i<CCL_len[key]; i++){
-        buffer<<=1;
-        buffer|= (code & 1);
-        code>>=1;
-    }
-    for(int i=1; i<=extr_len; i++){
-        buffer<<=i;
-        buffer|= extra & 0b1;
-        extra>>=1;
-    }
+    buffer|= (code << bitpos);
+    bitpos+=CCL_len[key];
+    
+    code = revCodes(extra, extr_len);
+    buffer|= (code<<bitpos);
+    bitpos+=extr_len;
 }
 
 void buildTree(){
@@ -410,12 +406,6 @@ void createCCL_freq(){
     }
 }
 
-void writeBitcode(uint32_t code, int len, strctBuff buf){
-    if(buf.bitpose + len > 64) flush();
-    buf.buffer|= (code<<buf.bitpose);
-    buf.bitpose+=len;
-}
-
 uint64_t revCodes(uint64_t code, int len){
     uint64_t rev=0;
     while (len--)
@@ -426,49 +416,39 @@ uint64_t revCodes(uint64_t code, int len){
     return rev;
 }
 
+//only for huffman codes
+void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos){
+    code = revCodes(code, len);
+    if(buffer + len > 64) flush(buffer, bitpos);
+    buffer|= (code<<bitpos);
+    bitpos+=len;
+}
 
-
-//Rewrite/fix writeBitcode writeExtra and flush
-
-void writeBitcode(int index, std::unordered_map<int, uint64_t> map, int &freebits, uint64_t &outBuffer){    
-    uint64_t disp;
-
-    disp = map[index].length;
-    if(disp > freebits) flush(outBuffer, freebits);
-    outBuffer = (outBuffer<<disp) | map[index].bits;
-    freebits-=disp;
-        
-    }
-
-void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len){
+void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
     //forgot i need to add the extra bits so more code and methods for dcode abd lcode
-    uint64_t disp;
+    uint64_t extra;
     int indx;
 
     if(len){
-        indx = lcode(value);
-        disp = lengthTable[indx].extraBits;
-        if(disp > freebits) flush(outBuffer, freebits);
-        outBuffer = (outBuffer<<disp) | (value - lengthTable[indx].baselength);
+        indx = lcode(key);
+        extra = lengthTable[indx].extraBits;
+        if(extra+bitpos > 63) flush(buffer, bitpos);
+        buffer|= ((key-lengthTable[indx].baselength)<<bitpos);
 
     }else{
-        indx = dcode(value);
-        disp = distTable[indx].extraBits;
-        if(disp > freebits) flush(outBuffer, freebits);
-        outBuffer = (outBuffer<<disp) | (value - distTable[indx].basedist);
+        indx = dcode(key);
+        extra = distTable[indx].extraBits;
+        if(extra+bitpos > 63) flush(buffer, bitpos);
+        buffer|= ((key-distTable[indx].basedist)<<bitpos);
+
     }
-
-    freebits-=disp;
-
+    bitpos+=extra;
 }
 
-void flush(uint64_t &buffer, int &freebits){
+void flush(uint64_t &buffer, int &bitpos){
+    int bytes = (bitpos+1)/8; //bitpos starts with 0
 
-    int bytes = (64-freebits) / 8; 
-    //replace_this.write(reinterpret_cast<char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
-    replace_this.write(reinterpret_cast<char*>(&buffer), bytes); //should work also this write bottom -> up buffer 
-    freebits+= bytes*8;
-    //good for stirng buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
-    buffer <<=bytes*8;
-    buffer >>=bytes*8;
+    out.write(reinterpret_cast<const char*>(&buffer), bytes); //should work
+    bitpos-= (bytes*8)-1;
+    buffer>>=bytes*8;
 }
