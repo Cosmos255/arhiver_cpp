@@ -66,7 +66,7 @@ std::vector<token> lz77_token(std::string file_name){
         find_match(lz77);
         move_window(lz77);
     }
-
+    /*
     for(token t : tokens){
         std::cout<<"TOKEN:\n";
         if(t.type == match){
@@ -77,7 +77,7 @@ std::vector<token> lz77_token(std::string file_name){
             std::cout<<"lvalue\n";
         }
     }
-
+    */
     lz77.in.close();
     return tokens;
 

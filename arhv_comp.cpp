@@ -46,13 +46,29 @@ std::unordered_map<int, uint64_t> dist; //the map for the distances
 std::unordered_map<int, uint64_t> CCL; //these 3 maps can be replaced with 3 simple arrays as the amount of values is fixed
 
 
-std::ofstream out("example.arhv", std::ios::binary);
+
+void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos);
+void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos);
+void buildTree();
+void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len=0, int i=0);
+void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map);
+void createCCL_freq();
+uint64_t revCodes(uint64_t code, int len);
+void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos);
+void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len);
+void flush(uint64_t &buffer, int &bitpos);
+
+
+std::ofstream out("out.bin", std::ios::out | std::ios::binary);
 
 int main(){
+    if (!out) {
+        std::cerr << "Failed to open file\n";
+    }
 
     tree.reserve(1); //should add smth to improve performance
 
-    auto lzed = lz77_token("file.example");
+    auto lzed = lz77_token("example.txt");
     
     //creating a frequency array from tokens
     for(token &tk : lzed){
@@ -71,6 +87,11 @@ int main(){
         HLIT++;
     } 
     buildTree();
+
+    std::cout<<"\n Freq"<<tree[tree.size()-1].freq<<"\n";
+    std::cout<<"\n LEFT"<<tree[tree.size()-1].left<<"\n";
+    std::cout<<"\n RIGHT"<<tree[tree.size()-1].right<<"\n";
+    std::cout<<"\n VALUE"<<tree[tree.size()-1].value<<"\n";
     createCodes(code_len, codes);
     tree.clear();
     bn_heap::clear();
@@ -153,9 +174,11 @@ int main(){
 
     //CCL output
 
+
+
     for(int i=0; i<19; i++){
         uint64_t code = revCodes(CCL[CCL_order[i]], CCL_len[CCL_order[i]]); //maybe use key=CCL_order[i]
-
+        if(bitpos + CCL_len[CCL_order[i]] > 63) flush(buffer, bitpos);
         buffer|=(code << bitpos);
         bitpos+=CCL_len[CCL_order[i]];
 
@@ -201,6 +224,13 @@ int main(){
     }
 
     writeBitcode(codes[256], code_len[256], buffer, bitpos); //this should be it i think
+
+    char x = 'A';
+    out.write(&x, 1);
+    out.close();
+
+    out.flush();
+    out.close();
 
     return 0;
 
@@ -255,9 +285,11 @@ void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
     }
     code = revCodes(CCL[key], CCL_len[key]);
 
+    if(buffer + CCL_len[key] > 63) flush(buffer, bitpos);
     buffer|= (code << bitpos);
     bitpos+=CCL_len[key];
     
+    if(buffer + extr_len > 63) flush(buffer, bitpos);
     code = revCodes(extra, extr_len);
     buffer|= (code<<bitpos);
     bitpos+=extr_len;
@@ -266,9 +298,14 @@ void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
 void buildTree(){
     using namespace bn_heap;
 
-    Node parent;
+    Node parent; //fix so value isnt uint and that it gets initial value /0 or smth different than -1 
     Node left = extrt();
     Node right = extrt();
+
+    //add size to bnheap to fix random latent buggs
+    //fix this either change uint32 to it so -1 does overflow or
+    //add isleaf to node and it wont push and last
+    //can add a size function to check before extracting
 
     while(left.value != -1 && right.value != -1){
         tree.push_back(left);
@@ -291,20 +328,21 @@ void buildTree(){
 
 }
 
-void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len=0, int i){
+void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len, int i){
 
     len++;
+    if(tree[i].left == -1 && tree[i].right == -1){
+        len_arr[tree[i].value] = len;
+        val_len.push_back({tree[i].value, len});
+        return;
+    }
+
     if(tree[i].left){
         createLen(val_len, len_arr, len, tree[i].left);
     }
     if(tree[i].right){
         createLen(val_len, len_arr, len, tree[i].right);
     }
-    if(tree[i].left == -1 && tree[i].right == -1){
-        len_arr[tree[i].value] = len;
-        val_len.push_back({tree[i].value, len});
-    }
-    
 }
 
 void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
@@ -329,13 +367,14 @@ void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
     int prev_length = value_len[0].length;
     uint32_t code = 0;
 
-    int i = 1;
+    i = 1;
 
     while(i < value_len.size()){
         bits current = value_len[i];
         code++;
         if(current.length > prev_length) code<<= current.length-prev_length;
         map[current.value] = code;
+        i++;
     }
 }
 

@@ -14,15 +14,15 @@ std::vector<Node> heap;
 
 int parent = 0;
 int size = 0;
-int child;
-
+int child = 0;
+ 
 void bn_heap::insert(Node nd){
     heap.push_back(nd);
     size++;
     if(size == 1) return;
     child = size-1;
-    if(child%2) parent = (child-1)/2;
-    else parent = (child-2)/2; 
+    parent = (child-1)/2;
+
 
 
     while(heap[parent].freq > heap[child].freq && child > 0){
@@ -35,6 +35,9 @@ void bn_heap::insert(Node nd){
 
 void bn_heap::clear(){
     heap.clear();
+    parent=0;
+    size=0;
+    child =0;
 }
 
 
@@ -44,12 +47,17 @@ Node bn_heap::extrt(){
     size--;
     heap[0] = heap[size];
     heap.pop_back();
-
+    if(size != heap.size()) throw std::runtime_error("Broken :/");
 
     int lf = 1;
     int rf = 2;
     parent = 0;
-    child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
+    child = parent;
+
+    if(lf < size && heap[lf].freq < heap[child].freq) child=lf; //compare lf to parent.freq
+    
+    if(rf < size && heap[rf].freq < heap[child].freq) child=rf; //compares rf to lf.freq
+
 
     while(heap[parent].freq > heap[child].freq){
         std::swap(heap[parent], heap[child]);
