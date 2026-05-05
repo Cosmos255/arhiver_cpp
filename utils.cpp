@@ -45,18 +45,19 @@ Node bn_heap::extrt(){
     if(size==0) return {-1 , 0};
     Node rt = std::move(heap[0]);
     size--;
-    heap[0] = heap[size];
-    heap.pop_back();
-    if(size != heap.size()) throw std::runtime_error("Broken :/");
+    heap[0] = heap[heap.size()-1];
+    //if(size != heap.size()) throw std::runtime_error("Broken :/");
 
+    parent = 0;
     int lf = 1;
     int rf = 2;
-    parent = 0;
-    child = parent;
 
-    if(lf < size && heap[lf].freq < heap[child].freq) child=lf; //compare lf to parent.freq
     
-    if(rf < size && heap[rf].freq < heap[child].freq) child=rf; //compares rf to lf.freq
+
+    int child = parent;
+
+    if(lf < size && heap[lf].freq < heap[parent].freq) child=lf;
+    if(rf < size && heap[rf].freq < heap[child].freq) child = rf;
 
 
     while(heap[parent].freq > heap[child].freq){
@@ -70,6 +71,7 @@ Node bn_heap::extrt(){
         else if(rf >= size) rf=lf;
         child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
     }
+    heap.pop_back();
     return rt;
 }
 

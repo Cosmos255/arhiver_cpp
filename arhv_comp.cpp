@@ -17,8 +17,18 @@ as we can switch to uint32t instead of 64
 
 
 */
+//freq Len code
+struct FLC {
+    int freq=0;
+    int len=0;
+    uint64_t code =0;
+};
 
-using CodeSize = uint64_t; //just for testing rn
+//FLC codes[maxCodeValue] = {};
+//FLC dist[maxDistValue] = {};
+//FLC CCL[19];
+
+//using CodeSize = uint64_t; //just for testing rn
 
 const int MAX_BITS = 15;
 
@@ -59,7 +69,7 @@ void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len);
 void flush(uint64_t &buffer, int &bitpos);
 
 
-std::ofstream out("out.bin", std::ios::out | std::ios::binary);
+std::ofstream out("out.txt", std::ios::out | std::ios::binary);
 
 int main(){
     if (!out) {
@@ -253,8 +263,9 @@ void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bi
         }
     }
 
-    while(prev_count--){
+    while(prev_count > 0){
         outputCCLCode(prev, prev_count, buffer, bitpos);
+        prev_count--;
     }
 
     prev_count = 0;
@@ -285,14 +296,16 @@ void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
     }
     code = revCodes(CCL[key], CCL_len[key]);
 
-    if(buffer + CCL_len[key] > 63) flush(buffer, bitpos);
+    if(bitpos + CCL_len[key] > 63) flush(buffer, bitpos);
     buffer|= (code << bitpos);
     bitpos+=CCL_len[key];
     
-    if(buffer + extr_len > 63) flush(buffer, bitpos);
+    if(bitpos + extr_len > 63) flush(buffer, bitpos);
     code = revCodes(extra, extr_len);
     buffer|= (code<<bitpos);
     bitpos+=extr_len;
+
+    count = std::max(0, count);
 }
 
 void buildTree(){
@@ -333,7 +346,7 @@ void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len, int i){
     len++;
     if(tree[i].left == -1 && tree[i].right == -1){
         len_arr[tree[i].value] = len;
-        val_len.push_back({tree[i].value, len});
+        val_len.push_back({static_cast<uint32_t>(tree[i].value), len});
         return;
     }
 
@@ -458,7 +471,7 @@ uint64_t revCodes(uint64_t code, int len){
 //only for huffman codes
 void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos){
     code = revCodes(code, len);
-    if(buffer + len > 64) flush(buffer, bitpos);
+    if(bitpos + len > 64) flush(buffer, bitpos);
     buffer|= (code<<bitpos);
     bitpos+=len;
 }

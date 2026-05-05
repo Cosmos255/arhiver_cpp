@@ -13,7 +13,7 @@ struct bits{
 
 namespace bn_heap{
     struct Node{
-        uint32_t value;
+        int value;
         int freq;
         int left = -1; 
         int right = -1;
