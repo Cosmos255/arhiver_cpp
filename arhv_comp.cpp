@@ -45,9 +45,9 @@ int code_freq[maxCodeValue] = {0};
 int dist_freq[maxDistValue] = {0};
 int CCL_freq[19]=  {0};
 
-int HLIT=0;
-int HDIST=0;
-int HCLEN=0;
+int HLIT=257;
+int HDIST=1;
+int HCLEN=4;
 
 std::vector<bn_heap::Node> tree;
 
@@ -66,10 +66,10 @@ void createCCL_freq();
 uint64_t revCodes(uint64_t code, int len);
 void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos);
 void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len);
-void flush(uint64_t &buffer, int &bitpos);
+void flush(uint64_t &buffer, int &bitpos, bool final=0);
 
 
-std::ofstream out("out.txt", std::ios::out | std::ios::binary);
+std::ofstream out("out.txt", std::ios::binary);
 
 int main(){
     if (!out) {
@@ -94,7 +94,6 @@ int main(){
     for(int i=0; i<maxCodeValue; i++)
     if(code_freq[i]){
         bn_heap::insert({i, code_freq[i]});
-        HLIT++;
     } 
     buildTree();
 
@@ -110,7 +109,6 @@ int main(){
     for(int i=0; i<maxDistValue; i++)
     if(dist_freq[i]){
         bn_heap::insert({i, dist_freq[i]});
-        HDIST++;
     } 
     buildTree();
     createCodes(dist_len, dist);
@@ -124,7 +122,6 @@ int main(){
     for(int i=0; i<19; i++)
         if(CCL_freq[i]){
             bn_heap::insert({i, CCL_freq[i]});
-            HCLEN++;
     }
     
     buildTree();
@@ -138,6 +135,8 @@ int main(){
     HLIT-=257;
     HDIST-=1;
     HCLEN-=4;
+
+    if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
 
     //std::string buffer;
 
@@ -188,7 +187,7 @@ int main(){
 
     for(int i=0; i<19; i++){
         uint64_t code = revCodes(CCL[CCL_order[i]], CCL_len[CCL_order[i]]); //maybe use key=CCL_order[i]
-        if(bitpos + CCL_len[CCL_order[i]] > 63) flush(buffer, bitpos);
+        if(bitpos + CCL_len[CCL_order[i]] > 64) flush(buffer, bitpos);
         buffer|=(code << bitpos);
         bitpos+=CCL_len[CCL_order[i]];
 
@@ -234,14 +233,9 @@ int main(){
     }
 
     writeBitcode(codes[256], code_len[256], buffer, bitpos); //this should be it i think
+    flush(buffer, bitpos, 1);
 
-    char x = 'A';
-    out.write(&x, 1);
     out.close();
-
-    out.flush();
-    out.close();
-
     return 0;
 
 
@@ -296,12 +290,12 @@ void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
     }
     code = revCodes(CCL[key], CCL_len[key]);
 
-    if(bitpos + CCL_len[key] > 63) flush(buffer, bitpos);
+    if(bitpos + CCL_len[key] > 64) flush(buffer, bitpos);
     buffer|= (code << bitpos);
     bitpos+=CCL_len[key];
     
-    if(bitpos + extr_len > 63) flush(buffer, bitpos);
-    code = revCodes(extra, extr_len);
+    if(bitpos + extr_len > 64) flush(buffer, bitpos);
+    code = extra;
     buffer|= (code<<bitpos);
     bitpos+=extr_len;
 
@@ -497,10 +491,19 @@ void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
     bitpos+=extra;
 }
 
-void flush(uint64_t &buffer, int &bitpos){
-    int bytes = (bitpos+1)/8; //bitpos starts with 0
+void flush(uint64_t &buffer, int &bitpos, bool final){
+    int bytes = bitpos/8; //bitpos starts with 0
+    if(final && bitpos%8) bytes++;
+    uint8_t *tmp = new uint8_t[bytes];
 
-    out.write(reinterpret_cast<const char*>(&buffer), bytes); //should work
-    bitpos-= (bytes*8)-1;
-    buffer>>=bytes*8;
+    for(int i=0; i<bytes; i++){
+        tmp[i] = buffer & 0xFF;
+        buffer>>=8;
+    }
+    for(int i=0; i<bytes; i++){
+        printf("%02X", tmp[i]);
+    }
+
+    out.write(reinterpret_cast<char*>(tmp), bytes);
+    bitpos-= bytes*8;
 }
