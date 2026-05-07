@@ -58,7 +58,7 @@ std::unordered_map<int, uint64_t> CCL; //these 3 maps can be replaced with 3 sim
 
 
 void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos);
-void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos);
+void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos);
 void buildTree();
 void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len=0, int i=0);
 void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map);
@@ -76,7 +76,7 @@ int main(){
         std::cerr << "Failed to open file\n";
     }
 
-    tree.reserve(1); //should add smth to improve performance
+    tree.reserve(600); //should add smth to improve performance
 
     auto lzed = lz77_token("example.txt");
     
@@ -86,21 +86,24 @@ int main(){
             code_freq[257 + lcode(tk.len)]++;
             dist_freq[dcode(tk.dist)]++;
         }
-        else code_freq[(int)(tk.data)]++;
+        else code_freq[(uint8_t)(tk.data)]++;
 
     }
+    for(int i=0; i<maxDistValue; i++){
+        if(dist_freq) break;
+        if(i == maxDistValue-1) code_freq[0] = 1;
+    }
+
+    code_freq[256]++; //for end of block
 
     //literal length codes
+    
     for(int i=0; i<maxCodeValue; i++)
     if(code_freq[i]){
         bn_heap::insert({i, code_freq[i]});
+        
     } 
     buildTree();
-
-    std::cout<<"\n Freq"<<tree[tree.size()-1].freq<<"\n";
-    std::cout<<"\n LEFT"<<tree[tree.size()-1].left<<"\n";
-    std::cout<<"\n RIGHT"<<tree[tree.size()-1].right<<"\n";
-    std::cout<<"\n VALUE"<<tree[tree.size()-1].value<<"\n";
     createCodes(code_len, codes);
     tree.clear();
     bn_heap::clear();
@@ -131,12 +134,28 @@ int main(){
 
 
     //Creating the header and blocks and outputtign the data
+
+    HLIT = maxCodeValue-1;
+    while(HLIT > 257 && code_len[HLIT] == 0){
+        HLIT--;
+    }
+
+    HDIST = maxDistValue-1;
+    while(HDIST > 1 && dist_len[HDIST] == 0){
+        HDIST--;
+    }
+
+    HCLEN = 18;
+    while (HCLEN > 4 && CCL_len[CCL_order[HCLEN]] == 0){
+        HCLEN--;
+    }
     
     HLIT-=257;
     HDIST-=1;
     HCLEN-=4;
 
     if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
+    
 
     //std::string buffer;
 
@@ -166,18 +185,18 @@ int main(){
 
     //HLIT 5bits
 
-    buffer |= (static_cast<uint64_t>(HLIT) << bitpos);
+    buffer |= (static_cast<uint8_t>(HLIT) << bitpos);
     bitpos+=5;
 
 
     //HDIST 5 bits
 
-    buffer |= (static_cast<uint64_t>(HDIST) << bitpos);
+    buffer |= (static_cast<uint8_t>(HDIST) << bitpos);
     bitpos+=5;
 
     //HCLEN 4 bits
 
-    buffer |= (static_cast<uint64_t>(HCLEN) << bitpos);
+    buffer |= (static_cast<uint8_t>(HCLEN) << bitpos);
     bitpos+=4;
 
 
@@ -185,7 +204,7 @@ int main(){
 
 
 
-    for(int i=0; i<19; i++){
+    for(int i=0; i<=(HCLEN+4); i++){
         uint64_t code = revCodes(CCL[CCL_order[i]], CCL_len[CCL_order[i]]); //maybe use key=CCL_order[i]
         if(bitpos + CCL_len[CCL_order[i]] > 64) flush(buffer, bitpos);
         buffer|=(code << bitpos);
@@ -199,24 +218,29 @@ int main(){
     int prev = code_len[0];
     int prev_count = 0;
 
-    for(int i=1; i<maxCodeValue; i++){
+    for(int i=1; i<=(HLIT+257); i++){
         if(prev == code_len[i]) prev_count++;
         else{
             outputDictionary(prev, prev_count, buffer, bitpos);
             prev = code_len[i];
+            prev_count = 1;
         }
     }
+    outputDictionary(prev, prev_count, buffer, bitpos);
 
-    for(int i=0; i<maxDistValue; i++){
+    prev = dist_len[0];
+    prev_count = 0;
+
+    for(int i=0; i<=(HDIST+1); i++){
         if(prev==dist_len[i]) prev_count++;
         else{ 
             outputDictionary(prev, prev_count, buffer, bitpos);
             prev = dist_len[i];
+            prev_count = 1;
             continue;
         }
-        if(i == maxDistValue-1) outputDictionary(prev, prev_count, buffer, bitpos); //for the dist bc if the last one is a match it wont output the last ones;
     }
-
+    outputDictionary(prev, prev_count, buffer, bitpos);
 
     //outputting the compressed data
 
@@ -238,68 +262,78 @@ int main(){
     out.close();
     return 0;
 
-
+    std::cerr<<"THE HDIST HCLEN and HLIN arent computed correctly so it doesnt work";
 
     //now its decompresser time
 }
 
 void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos){
-    outputCCLCode(prev, prev_count, buffer, bitpos);
+     
+    outputCCLCode(prev, 0, buffer, bitpos);
 
-    if(prev > 0) while(prev_count >= 3) outputCCLCode(16, prev_count, buffer, bitpos);    
+    int repeat_len;
+    int extra;
+
+    if(prev > 0) while(prev_count >= 3){
+        repeat_len = std::min(prev_count, 6);
+        extra = repeat_len-3;
+
+        outputCCLCode(16, extra, buffer, bitpos);
+
+        prev_count-=repeat_len;
+    }
+   
 
     if(prev == 0){
-        while(prev_count > 10){
-            outputCCLCode(18, prev_count, buffer, bitpos);
+        while(prev_count >= 11){
+            repeat_len = std::min(prev_count, 138);
+            extra = repeat_len - 11;
+            outputCCLCode(18, extra, buffer, bitpos);
+            prev_count-=repeat_len;
         }
-        while (prev_count < 11 && prev_count >= 3){
-            outputCCLCode(17, prev_count, buffer, bitpos);
+        while (prev_count >= 3){
+            repeat_len = std::min(prev_count, 10);
+            extra = repeat_len - 3;
+            outputCCLCode(17, extra, buffer, bitpos);
+            prev_count-=repeat_len;
         }
     }
 
     while(prev_count > 0){
-        outputCCLCode(prev, prev_count, buffer, bitpos);
+        outputCCLCode(prev, 0, buffer, bitpos);
         prev_count--;
     }
-
-    prev_count = 0;
 }
 
-void outputCCLCode(int key, int &count, uint64_t &buffer, int &bitpos){
-    int extra = 0;
-    int extr_len = 2;
-    uint64_t code;
+void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos){
+    int extr_len;
+
     switch (key){
     case 16:
-        extra = (count%6)-3;
-        count-=6;
         extr_len = 2;
         break;
     case 17:
-        extra = (count%10)-3;
-        count-=10;
         extr_len = 3;
         break;
     case 18:
-        extra = (count%138)-11;
-        count-=138;  
         extr_len = 7;  
         break;
     default:
+        extr_len = 0;
         break;
     }
-    code = revCodes(CCL[key], CCL_len[key]);
+
+    uint64_t code = revCodes(CCL[key], CCL_len[key]);
 
     if(bitpos + CCL_len[key] > 64) flush(buffer, bitpos);
     buffer|= (code << bitpos);
     bitpos+=CCL_len[key];
     
+
     if(bitpos + extr_len > 64) flush(buffer, bitpos);
     code = extra;
     buffer|= (code<<bitpos);
     bitpos+=extr_len;
-
-    count = std::max(0, count);
 }
 
 void buildTree(){
@@ -328,9 +362,12 @@ void buildTree(){
         right = extrt();
     }
 
-    if(parent.left == -1){
+    if(right.value == -1){
         parent = left;
     }
+    //if(parent.left == -1){
+    //    parent = left;
+    //}
     tree.push_back(parent); //root 
 
 }
@@ -344,10 +381,10 @@ void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len, int i){
         return;
     }
 
-    if(tree[i].left){
+    if(tree[i].left >= 0){ //might be 0 is valid too 
         createLen(val_len, len_arr, len, tree[i].left);
     }
-    if(tree[i].right){
+    if(tree[i].right >= 0){ // 0 might be valid too
         createLen(val_len, len_arr, len, tree[i].right);
     }
 }
@@ -355,17 +392,32 @@ void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len, int i){
 void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
     std::vector<bits> value_len;
     
+    //canonical might be broken fix it :/ what a bitch
+
     createLen(value_len, len_arr, 0, tree.size()-1); //last element is root
 
     merge::sort(value_len,[](const bits &a, const bits &b){return a.length < b.length;}); //ascending
 
-    int i=1;
-    while(i < value_len.size()){
-        if(value_len[i-1].length == value_len[i].length){
-            if(value_len[i-1].value > value_len[i].value) std::swap(value_len[i], value_len[i-1]);
+    bool changed = true;
+    while (changed)
+    {
+        int i=1;
+        changed = false;
+        while(i < value_len.size()){
+
+            if(value_len[i-1].length != value_len[i].length){
+                i++;
+                continue;
+            }
+            
+            if(value_len[i-1].value > value_len[i].value){
+                std::swap(value_len[i], value_len[i-1]);
+                changed=true;
+            }
+            i++;
         }
-        i++;
-    } //sorting alphabeticly
+    }
+     //sorting alphabeticly
 
     //building the codes
 
@@ -374,13 +426,14 @@ void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
     int prev_length = value_len[0].length;
     uint32_t code = 0;
 
-    i = 1;
+    int i = 1;
 
     while(i < value_len.size()){
         bits current = value_len[i];
         code++;
         if(current.length > prev_length) code<<= current.length-prev_length;
         map[current.value] = code;
+        prev_length = current.length;
         i++;
     }
 }
@@ -456,6 +509,7 @@ uint64_t revCodes(uint64_t code, int len){
     uint64_t rev=0;
     while (len--)
     {
+        rev<<=1;
         rev|= (code & 0b1);
         code>>=1;
     }
@@ -490,8 +544,9 @@ void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
     }
     bitpos+=extra;
 }
-
+/*
 void flush(uint64_t &buffer, int &bitpos, bool final){
+
     int bytes = bitpos/8; //bitpos starts with 0
     if(final && bitpos%8) bytes++;
     uint8_t *tmp = new uint8_t[bytes];
@@ -506,4 +561,37 @@ void flush(uint64_t &buffer, int &bitpos, bool final){
 
     out.write(reinterpret_cast<char*>(tmp), bytes);
     bitpos-= bytes*8;
+}
+*/
+void flush(uint64_t &buffer, int &bitpos, bool final) {
+    int bytes = bitpos / 8;
+
+    if (final && (bitpos % 8)) {
+        bytes++; // include partial byte
+    }
+
+    uint8_t outbuf[8]; // max 64 bits = 8 bytes
+
+    uint64_t temp = buffer; // copy ONLY for reading
+
+    for (int i = 0; i < bytes; i++) {
+        outbuf[i] = temp & 0xFF;
+        temp >>= 8;
+    }
+
+    out.write((char*)outbuf, bytes);
+
+    // 🔥 IMPORTANT PART:
+    int remainingBits = bitpos - bytes * 8;
+
+    if (remainingBits > 0) {
+        // keep leftover bits WITHOUT shifting whole buffer incorrectly
+
+        buffer >>= (bytes * 8);  // move consumed bits down
+        buffer &= ((1ULL << remainingBits) - 1); // clean upper garbage
+    } else {
+        buffer = 0;
+    }
+
+    bitpos = remainingBits;
 }

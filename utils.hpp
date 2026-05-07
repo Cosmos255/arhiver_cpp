@@ -13,8 +13,8 @@ struct bits{
 
 namespace bn_heap{
     struct Node{
-        int value;
-        int freq;
+        int value = 0;
+        int freq = 0;
         int left = -1; 
         int right = -1;
         //left and right are for the huffman tree
