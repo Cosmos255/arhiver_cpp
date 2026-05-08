@@ -24,9 +24,11 @@ struct FLC {
     uint64_t code =0;
 };
 
-//FLC codes[maxCodeValue] = {};
-//FLC dist[maxDistValue] = {};
-//FLC CCL[19];
+//std::vector<FLC> codes(maxCodeValue);
+//std::vector<FLC> dist(maxDistValue);
+//std::vector<FLC> CCL(19);
+
+
 
 //using CodeSize = uint64_t; //just for testing rn
 
@@ -35,7 +37,19 @@ const int MAX_BITS = 15;
 constexpr int maxCodeValue = 286;
 constexpr int maxDistValue = 30;
 
+FLC codes[maxCodeValue] = {};
+FLC dist[maxDistValue] = {};
+FLC CCL[19] = {};
 
+
+std::vector<bn_heap::Node> tree;
+
+int HLIT=257;
+int HDIST=1;
+int HCLEN=4;
+
+
+/*
 //int code_len[maxCodeValue] = {0};
 int code_len[maxCodeValue] = {0};
 int dist_len[maxDistValue] = {0};
@@ -45,29 +59,28 @@ int code_freq[maxCodeValue] = {0};
 int dist_freq[maxDistValue] = {0};
 int CCL_freq[19]=  {0};
 
-int HLIT=257;
-int HDIST=1;
-int HCLEN=4;
 
-std::vector<bn_heap::Node> tree;
 
 std::unordered_map<int, uint64_t> codes; // the map for the literals and lengths
 std::unordered_map<int, uint64_t> dist; //the map for the distances
 std::unordered_map<int, uint64_t> CCL; //these 3 maps can be replaced with 3 simple arrays as the amount of values is fixed
+*/
 
+enum CCL_mode {WRITE, COUNT};
 
-
+void processDictionaryRun(CCL_mode mode, uint64_t&buffer, int &bitpos);
 void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos);
 void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos);
 void buildTree();
-void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len=0, int i=0);
-void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map);
-void createCCL_freq();
+void createLen(std::vector<bits> &val_len, FLC *arr,  uint16_t len, int i);
+void createCodes(FLC *arr);
 uint64_t revCodes(uint64_t code, int len);
 void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos);
 void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len);
 void flush(uint64_t &buffer, int &bitpos, bool final=0);
 
+void printHuffmanTable(const char* name, FLC* arr, int size);
+void printSortedLengths(FLC* arr, int size);
 
 std::ofstream out("out.txt", std::ios::binary);
 
@@ -83,70 +96,86 @@ int main(){
     //creating a frequency array from tokens
     for(token &tk : lzed){
         if(tk.type == match){
-            code_freq[257 + lcode(tk.len)]++;
-            dist_freq[dcode(tk.dist)]++;
+            if(lcode(tk.len) < 0) throw std::runtime_error("Lcode is negative");
+            if(dcode(tk.dist) < 0) throw std::runtime_error("Dcode is negative");
+
+            codes[257 + lcode(tk.len)].freq++;
+            dist[dcode(tk.dist)].freq++;
         }
-        else code_freq[(uint8_t)(tk.data)]++;
+        else codes[(uint8_t)(tk.data)].freq++;
 
     }
     for(int i=0; i<maxDistValue; i++){
-        if(dist_freq) break;
-        if(i == maxDistValue-1) code_freq[0] = 1;
+        if(dist[i].freq) break;
+        if(i == maxDistValue-1) dist[0].freq = 1;
     }
+    codes[256].freq++;  //for end of block
 
-    code_freq[256]++; //for end of block
 
     //literal length codes
     
     for(int i=0; i<maxCodeValue; i++)
-    if(code_freq[i]){
-        bn_heap::insert({i, code_freq[i]});
-        
+    if(codes[i].freq){
+        bn_heap::insert({i, codes[i].freq});
     } 
+
     buildTree();
-    createCodes(code_len, codes);
+    createCodes(codes);
     tree.clear();
     bn_heap::clear();
     
     //dist codes
     for(int i=0; i<maxDistValue; i++)
-    if(dist_freq[i]){
-        bn_heap::insert({i, dist_freq[i]});
+    if(dist[i].freq){
+        bn_heap::insert({i, dist[i].freq});
     } 
+
     buildTree();
-    createCodes(dist_len, dist);
+    createCodes(dist);
     tree.clear();
     bn_heap::clear();
 
+    uint64_t buffer = 0;
+    int bitpos = 0; //max is 64
 
-    createCCL_freq();
-
+    processDictionaryRun(COUNT, buffer, bitpos);
 
     for(int i=0; i<19; i++)
-        if(CCL_freq[i]){
-            bn_heap::insert({i, CCL_freq[i]});
+        if(CCL[i].freq){
+            bn_heap::insert({i, CCL[i].freq});
     }
     
     buildTree();
-    createCodes(CCL_len, CCL);
+    createCodes(CCL);
     tree.clear();
     bn_heap::clear();
+
+
+    printHuffmanTable("LITERAL/LEN CODES", codes, maxCodeValue);
+    printHuffmanTable("DIST CODES", dist, maxDistValue);
+    printHuffmanTable("CCL CODES", CCL, 19);
+
+    printSortedLengths(codes, maxCodeValue);
+    printSortedLengths(dist, maxDistValue);
+    printSortedLengths(CCL, 19);
+
+
 
 
     //Creating the header and blocks and outputtign the data
 
     HLIT = maxCodeValue-1;
-    while(HLIT > 257 && code_len[HLIT] == 0){
+    while(HLIT > 257 &&  codes[HLIT].len == 0){
         HLIT--;
     }
 
     HDIST = maxDistValue-1;
-    while(HDIST > 1 && dist_len[HDIST] == 0){
+    while(HDIST > 1 && dist[HDIST].len == 0){
         HDIST--;
     }
 
     HCLEN = 18;
-    while (HCLEN > 4 && CCL_len[CCL_order[HCLEN]] == 0){
+    while (HCLEN > 4 && CCL[CCL_order[HCLEN]].len == 0){
         HCLEN--;
     }
     
@@ -159,8 +188,8 @@ int main(){
 
     //std::string buffer;
 
-    uint64_t buffer = 0;
-    int bitpos = 0; //max is 64
+    buffer = 0;
+    bitpos = 0; //max is 64
 
 
     bool compresed = true;
@@ -185,18 +214,18 @@ int main(){
 
     //HLIT 5bits
 
-    buffer |= (static_cast<uint8_t>(HLIT) << bitpos);
+    buffer |= (static_cast<uint64_t>(HLIT) << bitpos);
     bitpos+=5;
 
 
     //HDIST 5 bits
 
-    buffer |= (static_cast<uint8_t>(HDIST) << bitpos);
+    buffer |= (static_cast<uint64_t>(HDIST) << bitpos);
     bitpos+=5;
 
     //HCLEN 4 bits
 
-    buffer |= (static_cast<uint8_t>(HCLEN) << bitpos);
+    buffer |= (static_cast<uint64_t>(HCLEN) << bitpos);
     bitpos+=4;
 
 
@@ -205,58 +234,31 @@ int main(){
 
 
     for(int i=0; i<=(HCLEN+4); i++){
-        uint64_t code = revCodes(CCL[CCL_order[i]], CCL_len[CCL_order[i]]); //maybe use key=CCL_order[i]
-        if(bitpos + CCL_len[CCL_order[i]] > 64) flush(buffer, bitpos);
+        int key = CCL_order[i];
+        uint64_t code = revCodes(CCL[key].code, CCL[key].len); //maybe use key=CCL_order[i]
+        if(bitpos + CCL[key].len > 64) flush(buffer, bitpos);
         buffer|=(code << bitpos);
-        bitpos+=CCL_len[CCL_order[i]];
-
+        bitpos+=CCL[key].len;
     }
 
 
     //Dictionay output with ccl
-
-    int prev = code_len[0];
-    int prev_count = 0;
-
-    for(int i=1; i<=(HLIT+257); i++){
-        if(prev == code_len[i]) prev_count++;
-        else{
-            outputDictionary(prev, prev_count, buffer, bitpos);
-            prev = code_len[i];
-            prev_count = 1;
-        }
-    }
-    outputDictionary(prev, prev_count, buffer, bitpos);
-
-    prev = dist_len[0];
-    prev_count = 0;
-
-    for(int i=0; i<=(HDIST+1); i++){
-        if(prev==dist_len[i]) prev_count++;
-        else{ 
-            outputDictionary(prev, prev_count, buffer, bitpos);
-            prev = dist_len[i];
-            prev_count = 1;
-            continue;
-        }
-    }
-    outputDictionary(prev, prev_count, buffer, bitpos);
-
+    processDictionaryRun(WRITE, buffer, bitpos);
     //outputting the compressed data
 
     for(token &t : lzed){
         if(t.type == match){
-            writeBitcode(codes[t.len], code_len[t.len], buffer, bitpos); //i think it works but i am not sure
+            writeBitcode(codes[257 + lcode(t.len)].code, codes[257 + lcode(t.len)].len, buffer, bitpos); //wait what about dcode and lcode ?? 
             writeExtra(t.len, buffer, bitpos, true);
-            writeBitcode(dist[t.dist], dist_len[t.dist], buffer, bitpos);
+            writeBitcode(dist[dcode(t.dist)].code, dist[dcode(t.dist)].len, buffer, bitpos);
             writeExtra(t.dist, buffer, bitpos, false);
         }
         else{
-            writeBitcode(codes[t.data], code_len[t.data], buffer, bitpos);
+            writeBitcode(codes[t.data].code, codes[t.data].len, buffer, bitpos);
         }
     }
 
-    writeBitcode(codes[256], code_len[256], buffer, bitpos); //this should be it i think
+    writeBitcode(codes[256].code, codes[256].len, buffer, bitpos); //this should be it i think
     flush(buffer, bitpos, 1);
 
     out.close();
@@ -270,10 +272,11 @@ int main(){
 void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos){
      
     outputCCLCode(prev, 0, buffer, bitpos);
+    prev_count--;
 
     int repeat_len;
     int extra;
-
+    /*
     if(prev > 0) while(prev_count >= 3){
         repeat_len = std::min(prev_count, 6);
         extra = repeat_len-3;
@@ -298,10 +301,43 @@ void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bi
             prev_count-=repeat_len;
         }
     }
-
+*/
     while(prev_count > 0){
         outputCCLCode(prev, 0, buffer, bitpos);
         prev_count--;
+    }
+}
+
+void createCCLFreq(const int prev, int &prev_count){
+    prev_count--;
+
+    int repeat_len;
+    int extra; 
+
+    if(prev > 0) while(prev_count >= 3){
+        repeat_len = std::min(prev_count, 6);
+        CCL[16].freq += repeat_len;
+        prev_count-=repeat_len;
+    }
+   
+
+    if(prev == 0){
+        while(prev_count >= 11){
+            repeat_len = std::min(prev_count, 138);
+            CCL[18].freq += repeat_len;
+            prev_count-=repeat_len;
+        }
+        while (prev_count >= 3){
+            repeat_len = std::min(prev_count, 10);
+            CCL[17].freq += repeat_len;
+            prev_count-=repeat_len;
+        }
+    }
+
+
+    while(prev_count > 0){
+        CCL[prev].freq += prev_count;
+        prev_count = 0;
     }
 }
 
@@ -323,11 +359,11 @@ void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos){
         break;
     }
 
-    uint64_t code = revCodes(CCL[key], CCL_len[key]);
+    uint64_t code = revCodes(CCL[key].code, CCL[key].len);
 
-    if(bitpos + CCL_len[key] > 64) flush(buffer, bitpos);
+    if(bitpos + CCL[key].len > 64) flush(buffer, bitpos);
     buffer|= (code << bitpos);
-    bitpos+=CCL_len[key];
+    bitpos+=CCL[key].len;
     
 
     if(bitpos + extr_len > 64) flush(buffer, bitpos);
@@ -339,7 +375,7 @@ void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos){
 void buildTree(){
     using namespace bn_heap;
 
-    Node parent; //fix so value isnt uint and that it gets initial value /0 or smth different than -1 
+     //fix so value isnt uint and that it gets initial value /0 or smth different than -1 
     Node left = extrt();
     Node right = extrt();
 
@@ -347,8 +383,8 @@ void buildTree(){
     //fix this either change uint32 to it so -1 does overflow or
     //add isleaf to node and it wont push and last
     //can add a size function to check before extracting
-
     while(left.value != -1 && right.value != -1){
+        Node parent;
         tree.push_back(left);
         tree.push_back(right);
 
@@ -363,41 +399,48 @@ void buildTree(){
     }
 
     if(right.value == -1){
-        parent = left;
+        tree.push_back(left);
     }
     //if(parent.left == -1){
     //    parent = left;
     //}
-    tree.push_back(parent); //root 
+    //tree.push_back(parent); //root 
 
 }
 
-void createLen(std::vector<bits> &val_len, int *len_arr,  uint16_t len, int i){
+void createLen(std::vector<bits> &val_len, FLC *arr,  uint16_t len, int i){
+    //len++;
 
-    len++;
+    if(len > MAX_BITS) throw std::runtime_error("BITS are tooo long");
+
     if(tree[i].left == -1 && tree[i].right == -1){
-        len_arr[tree[i].value] = len;
-        val_len.push_back({static_cast<uint32_t>(tree[i].value), len});
+        if(len == 0) len=1;
+        arr[tree[i].value].len = len;
+        val_len.push_back({tree[i].value, len});
         return;
     }
 
-    if(tree[i].left >= 0){ //might be 0 is valid too 
-        createLen(val_len, len_arr, len, tree[i].left);
+    if(tree[i].left >= 0){
+        createLen(val_len, arr, len+1, tree[i].left);
     }
-    if(tree[i].right >= 0){ // 0 might be valid too
-        createLen(val_len, len_arr, len, tree[i].right);
+    if(tree[i].right >= 0){
+        createLen(val_len, arr, len+1, tree[i].right);
     }
 }
 
-void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
+void createCodes(FLC *arr){
     std::vector<bits> value_len;
     
     //canonical might be broken fix it :/ what a bitch
 
-    createLen(value_len, len_arr, 0, tree.size()-1); //last element is root
+    createLen(value_len, arr, 0, tree.size()-1); //last element is root
 
-    merge::sort(value_len,[](const bits &a, const bits &b){return a.length < b.length;}); //ascending
-
+    merge::sort(value_len,[](const bits &a, const bits &b){
+        if(a.length == b.length)
+            return a.value < b.value;
+        return a.length < b.length;
+    }); //ascending
+/*
     bool changed = true;
     while (changed)
     {
@@ -420,9 +463,20 @@ void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
      //sorting alphabeticly
 
     //building the codes
+*/
 
-    
-    map[value_len[0].value] = 0;
+    uint32_t code = 0;
+    int prev_len = 0;
+
+    for(bits &b : value_len){
+        code<<=(b.length - prev_len);
+        arr[b.value].code = code;
+        code++;
+        prev_len = b.length;
+    }
+
+    /*
+    arr[value_len[0].value].code = 0;
     int prev_length = value_len[0].length;
     uint32_t code = 0;
 
@@ -432,76 +486,60 @@ void createCodes(int *len_arr, std::unordered_map<int, uint64_t> &map){
         bits current = value_len[i];
         code++;
         if(current.length > prev_length) code<<= current.length-prev_length;
-        map[current.value] = code;
+        arr[current.value].code = code;
         prev_length = current.length;
         i++;
     }
+    */
 }
 
-void createCCL_freq(){
-    int prev = -1;
-    int prev_count=0;
+void processDictionaryRun(CCL_mode mode, uint64_t &buffer, int &bitpos){
+    if(mode == WRITE){
+        int prev = codes[0].len;
+        int prev_count = 1;// change from 0 to 1
 
-    for(int i=0; i<maxCodeValue; i++){
-        if(prev == code_len[i]) prev_count++;
-        else{
-            if(prev != 0){
-                while(prev_count >= 3){
-                    CCL_freq[16]++;
-                    prev_count-=6;
-                }
+        for(int i=1; i<=(HLIT+257); i++){
+            if(prev == codes[i].len) prev_count++;
+            else{
+                outputDictionary(prev, prev_count, buffer, bitpos);
+                prev = codes[i].len;
+                prev_count = 1;
             }
-
-            if(prev == 0){
-                while(prev_count >=11){
-                    CCL_freq[18]++;
-                    prev_count-=138;
-                }
-                while (prev_count <= 10 && prev_count >=3){
-                    CCL_freq[17]++;
-                    prev_count-=10;
-                }
-            }
-            
-            if(prev_count > 0){
-                CCL_freq[prev] += prev_count;
-                prev = code_len[i];
-                prev_count=0;
-                continue;
-            }  
         }
 
+        for(int i=0; i<=(HDIST+1); i++){
+            if(prev==dist[i].len) prev_count++;
+            else{ 
+                outputDictionary(prev, prev_count, buffer, bitpos);
+                prev = dist[i].len;
+                prev_count = 1;
+                continue;
+            }
+        }
+        outputDictionary(prev, prev_count, buffer, bitpos);
+
+
+    }else{
+        
+    int prev = codes[0].len;
+    int prev_count=1;
+    for(int i=1; i<maxCodeValue; i++){
+        if(prev == codes[i].len) prev_count++;
+        else{
+            createCCLFreq(prev, prev_count);
+            prev = codes[i].len;
+            prev_count = 1;
+        }
     }
-
     for(int i=0; i<maxDistValue; i++){
-        if(prev == dist_len[i]) prev_count++;
+        if(prev == dist[i].len) prev_count++;
         else{
-            if(prev != 0){
-                while(prev_count >= 3){
-                    CCL_freq[16]++;
-                    prev_count-=6;
-                }
-            }
-
-            if(prev == 0){
-                while(prev_count >=11){
-                    CCL_freq[18]++;
-                    prev_count-=138;
-                }
-                while (prev_count <= 10 && prev_count >=3){
-                    CCL_freq[17]++;
-                    prev_count-=10;
-                }
-            }
-            
-            if(prev_count > 0){
-                CCL_freq[prev] += prev_count;
-                prev = dist_len[i];
-                prev_count=0;
-                continue;
-            }  
+            createCCLFreq(prev, prev_count);
+            prev = dist[i].len;
+            prev_count = 1;
         }
-
+    }
+    createCCLFreq(prev, prev_count);
     }
 }
 
@@ -531,15 +569,16 @@ void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
 
     if(len){
         indx = lcode(key);
+        if(indx == -1) throw std::runtime_error("Invalid lenght");
         extra = lengthTable[indx].extraBits;
-        if(extra+bitpos > 63) flush(buffer, bitpos);
-        buffer|= ((key-lengthTable[indx].baselength)<<bitpos);
+        if(extra+bitpos > 64) flush(buffer, bitpos);
+        buffer|= (static_cast<uint64_t>(key-lengthTable[indx].baselength)<<bitpos);
 
     }else{
         indx = dcode(key);
         extra = distTable[indx].extraBits;
-        if(extra+bitpos > 63) flush(buffer, bitpos);
-        buffer|= ((key-distTable[indx].basedist)<<bitpos);
+        if(extra+bitpos > 64) flush(buffer, bitpos);
+        buffer|= (static_cast<uint64_t>(key-distTable[indx].basedist)<<bitpos);
 
     }
     bitpos+=extra;
@@ -581,7 +620,6 @@ void flush(uint64_t &buffer, int &bitpos, bool final) {
 
     out.write((char*)outbuf, bytes);
 
-    // 🔥 IMPORTANT PART:
     int remainingBits = bitpos - bytes * 8;
 
     if (remainingBits > 0) {
@@ -594,4 +632,27 @@ void flush(uint64_t &buffer, int &bitpos, bool final) {
     }
 
     bitpos = remainingBits;
+}
+
+void printHuffmanTable(const char* name, FLC* arr, int size) {
+    std::cout << "\n=== " << name << " ===\n";
+    std::cout << "Symbol | Freq | Len | Code\n";
+    std::cout << "-----------------------------\n";
+
+    for (int i = 0; i < size; i++) {
+        if (arr[i].len == 0 && arr[i].freq == 0) continue;
+
+        std::cout << i << "      | "
+                  << arr[i].freq << "   | "
+                  << arr[i].len << "   | "
+                  << arr[i].code << "\n";
+    }
+}
+
+void printSortedLengths(FLC* arr, int size) {
+    std::cout << "\n=== LENGTH ORDER CHECK ===\n";
+    for (int i = 0; i < size; i++) {
+        if (arr[i].len)
+            std::cout << i << " : len=" << arr[i].len << "\n";
+    }
 }

@@ -7,8 +7,8 @@
 
 
 struct bits{
-    uint32_t value = 0;
-    uint32_t length= 0;
+    int value = 0;
+    int length= 0;
 };
 
 namespace bn_heap{

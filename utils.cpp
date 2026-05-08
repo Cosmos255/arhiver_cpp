@@ -24,12 +24,10 @@ void bn_heap::insert(Node nd){
     parent = (child-1)/2;
 
 
-
     while(heap[parent].freq > heap[child].freq && child > 0){
         std::swap(heap[parent], heap[child]);
         child = parent;
-        if(child%2) parent = (child-1)/2;
-        else parent = (child-2)/2;
+        parent = (child-1)/2;
     }
 }
 
@@ -47,50 +45,36 @@ Node bn_heap::extrt(){
     size--;
     heap[0] = heap[heap.size()-1];
     heap.pop_back();
-    //if(size != heap.size()) throw std::runtime_error("Broken :/");
+    if(size != heap.size()) throw std::runtime_error("Broken :/");
 
     parent = 0;
-    int lf = 1;
-    int rf = 2;
 
+    while(true){
+        int lf = left(parent);
+        int rf = right(parent);
+        int child = parent;
+
+        if(lf < size && heap[lf].freq < heap[child].freq) child = lf;
+        if(rf < size && heap[rf].freq < heap[child].freq) child = rf;
     
+        if(child == parent) break;
 
-    int child = parent;
-
-    if(lf < size && heap[lf].freq < heap[parent].freq) child=lf;
-    if(rf < size && heap[rf].freq < heap[child].freq) child = rf;
-
-
-    while(heap[parent].freq > heap[child].freq){
         std::swap(heap[parent], heap[child]);
-
         parent = child;
-
-        lf = left(parent); //add heap limit
-        rf = right(parent);
-        if(lf >= size) break;
-        if(rf >= size) child=lf;
-        else child = (heap[lf].freq < heap[rf].freq) ? lf : rf;
     }
     return rt;
 }
 
 int lcode(int x){
-    for(int i=0; i<deflateBitLength; i++){
-        if(x < lengthTable[i].baselength){
-            i--;
-            return i;
-        }
+    for(int i=0; i<deflateBitLength-1; i++){
+        if(x >= lengthTable[i].baselength && x < lengthTable[i+1].baselength) return i;
     }
     return -1;
 };
 
 int dcode(int x){
     for(int i=0; i<deflateBitDist; i++){
-        if(x < distTable[i].basedist){
-            i--;
-            return i;
-        }
+        if(x >= distTable[i].basedist && x < distTable[i+1].basedist) return i;
     }
     return -1;
 };
