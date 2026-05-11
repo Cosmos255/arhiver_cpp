@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdio>
+#include <string>
 
 std::fstream in("out.bin", std::ios::in | std::ios::binary);
 
@@ -35,6 +36,8 @@ const int INPUT_SIZE = 10000;
 uint64_t bitbuf;
 int bitpos=0;
 
+void test();
+
 int main(){
     if(!in.is_open()) throw std::runtime_error("Couldnt open the file");
     in.read(reinterpret_cast<char *>(inbuffer), sizeof(inbuffer)); //idk windows size
@@ -47,6 +50,7 @@ int main(){
     fillBitBuff();
 
 }
+
 
 //IDEA 
 //WINDOW is only for the already proccesed codes that need to be outputtted and are used for matching
@@ -107,8 +111,6 @@ void fillBitBuff(){
     }
 }
 
-void moveBitBuffwindows();
-
 void readCodes(){
 
 }
@@ -134,7 +136,7 @@ void moveBitBuffwindows();
 
 uint32_t getbits(int len){
     uint32_t mask = (1u << len) -1;
-    if(bitpos + len > 32) moveBitBuffwindows();
+    if(bitpos + len > 64) moveBitBuffwindows(); //not enough bits;
     return (bitbuf >> bitpos) & mask;
 }
 
@@ -155,4 +157,18 @@ void HEXdump(uint32_t arr){
 
 
     
+}
+
+void test(){
+    std::string test = "Hello this is a test i the test code is 5555 and the user name is lain iwakura";
+    memcpy(inbuffer, test.data(), test.size());
+    pBitpos_end = inbuffer + test.size();
+    
+    uint8_t byte;
+
+    uint8_t byte = 0;
+        for (int i = 0; i < 8; i++) {
+            byte |= (getbits(1) << (7 - i));
+    }
+
 }
