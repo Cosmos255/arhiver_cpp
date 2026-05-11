@@ -1,3 +1,1 @@
-Helllo this is for testing the deflate program :P teh magic number is 555666777
-i hope it works we will see if it crashes well thats bouta be a pain in the arse
-to fix
+Hello :P

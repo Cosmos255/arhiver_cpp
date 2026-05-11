@@ -24,13 +24,6 @@ struct FLC {
     uint64_t code =0;
 };
 
-//std::vector<FLC> codes(maxCodeValue);
-//std::vector<FLC> dist(maxDistValue);
-//std::vector<FLC> CCL(19);
-
-
-
-//using CodeSize = uint64_t; //just for testing rn
 
 const int MAX_BITS = 15;
 
@@ -82,7 +75,10 @@ void flush(uint64_t &buffer, int &bitpos, bool final=0);
 void printHuffmanTable(const char* name, FLC* arr, int size);
 void printSortedLengths(FLC* arr, int size);
 
-std::ofstream out("out.txt", std::ios::binary);
+std::ofstream out("out.bin", std::ios::binary);
+
+std::vector<uint8_t> debug_stream;
+
 
 int main(){
     if (!out) {
@@ -92,7 +88,6 @@ int main(){
     tree.reserve(600); //should add smth to improve performance
 
     auto lzed = lz77_token("example.txt");
-    
     //creating a frequency array from tokens
     for(token &tk : lzed){
         if(tk.type == match){
@@ -164,24 +159,27 @@ int main(){
 
     //Creating the header and blocks and outputtign the data
 
+
     HLIT = maxCodeValue-1;
-    while(HLIT > 257 &&  codes[HLIT].len == 0){
+    while(HLIT >= 257 &&  codes[HLIT].len == 0){
         HLIT--;
     }
 
     HDIST = maxDistValue-1;
-    while(HDIST > 1 && dist[HDIST].len == 0){
+    while(HDIST >= 1 && dist[HDIST].len == 0){
         HDIST--;
     }
 
     HCLEN = 18;
-    while (HCLEN > 4 && CCL[CCL_order[HCLEN]].len == 0){
+    while (HCLEN >= 4 && CCL[CCL_order[HCLEN]].len == 0){
         HCLEN--;
     }
+
+
     
-    HLIT-=257;
-    HDIST-=1;
-    HCLEN-=4;
+    HLIT= (HLIT+1)-257; 
+    HDIST = (HDIST+1)-1; //indexing now this should really work as intented
+    HCLEN=(HCLEN+1)-4; //x 3 bits
 
     if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
     
@@ -229,16 +227,21 @@ int main(){
     bitpos+=4;
 
 
+    std::cout<<"HLIT: "<<HLIT+257;
+    std::cout<<"HDIST: "<<HDIST+1;
+    std::cout<<"HCLEN: "<<HCLEN+4<<"\n";
+
+
     //CCL output
 
 
 
-    for(int i=0; i<=(HCLEN+4); i++){
+    for(int i=0; i<(HCLEN+4); i++){
         int key = CCL_order[i];
-        uint64_t code = revCodes(CCL[key].code, CCL[key].len); //maybe use key=CCL_order[i]
-        if(bitpos + CCL[key].len > 64) flush(buffer, bitpos);
-        buffer|=(code << bitpos);
-        bitpos+=CCL[key].len;
+        if(CCL[key].len > 7) throw std::runtime_error("Too long aint ya");
+        if(bitpos > 61) flush(buffer, bitpos);
+        buffer|=(static_cast<uint64_t>(CCL[key].len & 0x7) << bitpos);
+        bitpos+=3;
     }
 
 
@@ -266,6 +269,11 @@ int main(){
 
     std::cerr<<"THE HDIST HCLEN and HLIN arent computed correctly so it doesnt work";
 
+    for(auto &x : debug_stream){
+        
+    }
+
+
     //now its decompresser time
 }
 
@@ -276,7 +284,7 @@ void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bi
 
     int repeat_len;
     int extra;
-    /*
+    
     if(prev > 0) while(prev_count >= 3){
         repeat_len = std::min(prev_count, 6);
         extra = repeat_len-3;
@@ -301,7 +309,7 @@ void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bi
             prev_count-=repeat_len;
         }
     }
-*/
+
     while(prev_count > 0){
         outputCCLCode(prev, 0, buffer, bitpos);
         prev_count--;
@@ -498,7 +506,7 @@ void processDictionaryRun(CCL_mode mode, uint64_t &buffer, int &bitpos){
         int prev = codes[0].len;
         int prev_count = 1;// change from 0 to 1
 
-        for(int i=1; i<=(HLIT+257); i++){
+        for(int i=1; i<(HLIT+257); i++){
             if(prev == codes[i].len) prev_count++;
             else{
                 outputDictionary(prev, prev_count, buffer, bitpos);
@@ -507,7 +515,7 @@ void processDictionaryRun(CCL_mode mode, uint64_t &buffer, int &bitpos){
             }
         }
 
-        for(int i=0; i<=(HDIST+1); i++){
+        for(int i=0; i<(HDIST+1); i++){
             if(prev==dist[i].len) prev_count++;
             else{ 
                 outputDictionary(prev, prev_count, buffer, bitpos);
@@ -583,7 +591,7 @@ void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
     }
     bitpos+=extra;
 }
-/*
+
 void flush(uint64_t &buffer, int &bitpos, bool final){
 
     int bytes = bitpos/8; //bitpos starts with 0
@@ -601,7 +609,7 @@ void flush(uint64_t &buffer, int &bitpos, bool final){
     out.write(reinterpret_cast<char*>(tmp), bytes);
     bitpos-= bytes*8;
 }
-*/
+/*
 void flush(uint64_t &buffer, int &bitpos, bool final) {
     int bytes = bitpos / 8;
 
@@ -616,6 +624,7 @@ void flush(uint64_t &buffer, int &bitpos, bool final) {
     for (int i = 0; i < bytes; i++) {
         outbuf[i] = temp & 0xFF;
         temp >>= 8;
+        debug_stream.push_back(outbuf[i]);
     }
 
     out.write((char*)outbuf, bytes);
@@ -633,7 +642,7 @@ void flush(uint64_t &buffer, int &bitpos, bool final) {
 
     bitpos = remainingBits;
 }
-
+*/
 void printHuffmanTable(const char* name, FLC* arr, int size) {
     std::cout << "\n=== " << name << " ===\n";
     std::cout << "Symbol | Freq | Len | Code\n";
