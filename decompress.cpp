@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cstdio>
 #include <string>
+#include <assert.h>
 
 std::fstream in("out.bin", std::ios::in | std::ios::binary);
 
@@ -132,11 +133,32 @@ uint8_t extractBitBuff(int len){
     bitpos+=len;
 }
 
-void moveBitBuffwindows();
+void fillInbuff(){
+
+}
+
+void moveBitBuffwindows(){
+    //add function to insert the data into the window
+
+    int rm = bitpos - (bitpos%8);
+    assert(rm >= 0);
+    bitbuf>>=rm;
+    bitpos-=rm;
+    if( rm/8 > abs(pBitpos_end-pBitpos)) fillInbuff();
+     //might use a try catch if -1 then its end and rm-= dif pointer*8 with some diferrence
+
+    while(rm > 0){
+        rm-=8;
+        bitbuf|=(uint64_t)(*pBitpos++) << (56 - rm);
+    }
+
+}
 
 uint32_t getbits(int len){
+    assert(len <= 15); //ma bits 15
     uint32_t mask = (1u << len) -1;
     if(bitpos + len > 64) moveBitBuffwindows(); //not enough bits;
+    bitpos+=len;
     return (bitbuf >> bitpos) & mask;
 }
 
@@ -163,12 +185,16 @@ void test(){
     std::string test = "Hello this is a test i the test code is 5555 and the user name is lain iwakura";
     memcpy(inbuffer, test.data(), test.size());
     pBitpos_end = inbuffer + test.size();
-    
+    pBitpos = &inbuffer[0];
     uint8_t byte;
 
-    uint8_t byte = 0;
-        for (int i = 0; i < 8; i++) {
-            byte |= (getbits(1) << (7 - i));
-    }
+    const int x = test.size();
 
+    uint8_t *tmp = new uint8_t[test.size()];
+    uint8_t *pos = &tmp[0];
+    while(pBitpos != pBitpos_end){
+        *tmp = getbits(8);
+        tmp++;
+        pBitpos++;
+    }
 }
