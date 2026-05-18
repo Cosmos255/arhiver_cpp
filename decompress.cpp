@@ -42,13 +42,16 @@ void test();
 int main(){
     if(!in.is_open()) throw std::runtime_error("Couldnt open the file");
     in.read(reinterpret_cast<char *>(inbuffer), sizeof(inbuffer)); //idk windows size
-    readHeadderType();
+    //readHeadderType();
 
     std::cout<<"HLIT: "<<header_settings.HLIT;
     std::cout<<"HDIST: "<<header_settings.HDIST;
     std::cout<<"HCLEN: "<<header_settings.HCLEN;
 
-    fillBitBuff();
+   test();
+
+    //fillBitBuff();
+
 
 }
 
@@ -98,8 +101,11 @@ void readHeadderType(){
     HEXdump(bitbuf);
 
 }
-
+/*
 void readAlfa();
+
+//Note the shift is moded so if buffer <<=64 then it does nothing
+//
 
 void fillBitBuff(){
     int bits = bitpos/8;
@@ -108,6 +114,7 @@ void fillBitBuff(){
     bitpos-=bits;
     while (bits > 0){
         bits-=8;
+        if(56-bits)
         bitbuf|= (uint64_t)(*pBitpos++) << (56 - bits);
     }
 }
@@ -128,42 +135,60 @@ void buildCanonical(){
 
 }
 
-uint8_t extractBitBuff(int len){
-    if(bitpos+len > 32) moveBitBuffwindows();
-    bitpos+=len;
-}
+uint8_t extractBitBuff(int len){*
+*/
 
 void fillInbuff(){
+    //maybe do a windows like in lz77a
+
+    int len = pBitpos_end-pBitpos;
+    assert (len >=0);
+    if(len) memmove(inbuffer, pBitpos, len);
+
+    in.read(reinterpret_cast<char *>(inbuffer+len), INBUFFER_SIZE-len);
+
+    assert(in.gcount() <= INBUFFER_SIZE-len);
+    if(in.gcount() != INBUFFER_SIZE-len) pBitpos_end = inbuffer+in.gcount()+len; 
+    pBitpos = inbuffer;
 
 }
 
 void moveBitBuffwindows(){
     //add function to insert the data into the window
-
     int rm = bitpos - (bitpos%8);
     assert(rm >= 0);
-    bitbuf>>=rm;
+    
+    if(rm == 64) bitbuf=0; //mobing by buff size will do nothing
+    else bitbuf>>=rm;
     bitpos-=rm;
+    
     if( rm/8 > abs(pBitpos_end-pBitpos)) fillInbuff();
-     //might use a try catch if -1 then its end and rm-= dif pointer*8 with some diferrence
 
-    while(rm > 0){
+    while(rm > 0 && pBitpos != pBitpos_end){
+        bitbuf|=(uint64_t)(*pBitpos++) << (64 - rm);
         rm-=8;
-        bitbuf|=(uint64_t)(*pBitpos++) << (56 - rm);
     }
 
 }
 
 uint32_t getbits(int len){
-    assert(len <= 15); //ma bits 15
+    assert(len <= 15); //max bits 15
+    assert(len >= 0);
     uint32_t mask = (1u << len) -1;
     if(bitpos + len > 64) moveBitBuffwindows(); //not enough bits;
     bitpos+=len;
-    return (bitbuf >> bitpos) & mask;
+    return (bitbuf >> (bitpos-len)) & mask;
 }
+//add smth to 
 
-void vHEXdump(void *arr, int len){
-    uint8_t *pAar = (uint8_t*)arr;
+
+void vHEXdump(const uint8_t *arr, int len){
+    //uint8_t *pAar = (uint8_t*)arr;
+
+    for(int i=0; i<len; i++){
+        printf("%02X ", arr[i]);
+    }
+
 }
 
 void HEXdump(uint32_t arr){
@@ -176,25 +201,32 @@ void HEXdump(uint32_t arr){
     for(int i=0; i<4; i++){
         printf("%02X ", tmp[i]);
     }
-
-
-    
 }
 
 void test(){
     std::string test = "Hello this is a test i the test code is 5555 and the user name is lain iwakura";
     memcpy(inbuffer, test.data(), test.size());
     pBitpos_end = inbuffer + test.size();
-    pBitpos = &inbuffer[0];
+    pBitpos = inbuffer;
+    bitpos = 64;
+    moveBitBuffwindows();
+
     uint8_t byte;
 
     const int x = test.size();
 
-    uint8_t *tmp = new uint8_t[test.size()];
+    uint8_t *tmp = new uint8_t[test.size()*2];
     uint8_t *pos = &tmp[0];
-    while(pBitpos != pBitpos_end){
-        *tmp = getbits(8);
-        tmp++;
-        pBitpos++;
+
+    try{
+        while(pBitpos != pBitpos_end || bitbuf){ //maybe use bitpos instead of bitbuff
+            *pos = getbits(4);
+            pos++;
+        }
+    }catch(...){
+        std::cout<<"\n\n\n";
+        vHEXdump(tmp, test.size());
     }
+    std::cout<<"\n\n\n";
+    vHEXdump(tmp, test.size()*2);
 }
