@@ -38,7 +38,6 @@ void bn_heap::clear(){
     child =0;
 }
 
-
 Node bn_heap::extrt(){
     if(size==0) return {-1 , 0};
     Node rt = std::move(heap[0]);
@@ -65,16 +64,19 @@ Node bn_heap::extrt(){
     return rt;
 }
 
+
 int lcode(int x){
-    for(int i=0; i<deflateBitLength-1; i++){
+    for(int i = 0; i < deflateBitLength - 1; i++){
         if(x >= lengthTable[i].baselength && x < lengthTable[i+1].baselength) return i;
     }
+    if(x >= lengthTable[deflateBitLength - 1].baselength) return deflateBitLength - 1;
     return -1;
-};
+}
 
 int dcode(int x){
-    for(int i=0; i<deflateBitDist; i++){
+    for(int i = 0; i < deflateBitDist - 1; i++){
         if(x >= distTable[i].basedist && x < distTable[i+1].basedist) return i;
     }
+    if(x >= distTable[deflateBitDist - 1].basedist) return deflateBitDist - 1;
     return -1;
-};
+}

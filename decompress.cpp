@@ -4,70 +4,269 @@
 #include <cstdio>
 #include <string>
 #include <assert.h>
+#include <vector>
+#include <unordered_map>
+#include <exception>
+#include <algorithm>
 
-std::fstream in("out.bin", std::ios::in | std::ios::binary);
+std::fstream in("download.dat", std::ios::in | std::ios::binary);
+std::ofstream out("echo.bin", std::ios::out | std::ios::trunc | std::ios::binary);
 
-const int INBUFFER_SIZE = 16*1024;
+constexpr int INBUFFER_SIZE = 16000; //16KB
+constexpr int OUTBUFFER_SIZE = 1<<20; //1MB
+constexpr int WINDOW_SIZE = 33000;
 
+
+struct canonical_struct{
+    int len = 0; //len/code
+    int symbol = 0; //the index in the array 
+};
 
 struct Header{
     bool final = 0;
     bool compressed = 0;
     bool dynamicHuffman = 0; // false
     bool reserved = 0;
+    bool ALL_LITERALS = false;
     int HLIT=0;
     int HDIST=0;
     int HCLEN=0;
-}header_settings;
 
+}header_settings;
+void vHEXdump(const uint8_t *arr, int len);
 void HEXdump(uint32_t arr);
 void readHeadderType();
+void initializeFixedMap();
+void readBlockFormat();
+void canonicalHuffman(std::vector<canonical_struct> &arr, std::unordered_map<int, int> &mp);
+std::vector<int> constructLenArray(std::unordered_map<int, int> &mp);
+int parseLiteral(bool parseLen=0, int symbol = 0);
+int parseDist();
+
+uint32_t getbits(int len=0);
+
+void findMatch(int len, int dist);
+void outBuffWrite(uint8_t ch = 0, bool f_out = 0);
+void cleanup();
+
+void consumebits(const bool empty=0);
 
 
+std::vector<uint8_t> window(WINDOW_SIZE);
+std::vector<uint8_t> inbuffer(INBUFFER_SIZE);
+std::vector<uint8_t> outbuffer(OUTBUFFER_SIZE);
 
 
-uint8_t window[32768];
-uint8_t inbuffer[INBUFFER_SIZE]; // 
+uint64_t window_indx;
+uint64_t window_notav;
 
-uint8_t *pBitpos = inbuffer;
-uint8_t *pBitpos_end = inbuffer + INBUFFER_SIZE;
+int outbuff_indx = 0;
+
+uint8_t *pBitpos = inbuffer.data();
+uint8_t *pBitpos_end = pBitpos + INBUFFER_SIZE;
 
 const int INPUT_SIZE = 10000;
 
-uint64_t bitbuf;
+uint64_t bitbuf = 0;
 int bitpos=0;
 
 void test();
 
+std::unordered_map<int, int> mp_literals;
+std::unordered_map<int, int> mp_distance;
+
+//rename it do decompress and pass intput file name and output file name/locations
+
 int main(){
+    try{
+
     if(!in.is_open()) throw std::runtime_error("Couldnt open the file");
-    in.read(reinterpret_cast<char *>(inbuffer), sizeof(inbuffer)); //idk windows size
-    //readHeadderType();
+    in.read(reinterpret_cast<char *>(inbuffer.data()), INBUFFER_SIZE); //idk windows size
 
-    std::cout<<"HLIT: "<<header_settings.HLIT;
-    std::cout<<"HDIST: "<<header_settings.HDIST;
-    std::cout<<"HCLEN: "<<header_settings.HCLEN;
+    pBitpos_end = inbuffer.data() + in.gcount();
 
-   test();
+    if(!out.is_open()) throw std::runtime_error("Couldnt open the file");
 
-    //fillBitBuff();
+    std::fill(window.begin(), window.end(), 0);
+    window_indx = 0;
+    window_notav = WINDOW_SIZE;
 
+    /*
+    ##############################################
+    consumebits(1)
+    Function for filling bitbuff
+    !!Only use when bitbuff is empty or for inital
+    fill it other cases dont pass any argument
+
+    ##############################################
+    */
+
+    consumebits(1);
+
+
+
+    while(true){
+        header_settings = {}; //initialize struct to defaults
+
+        mp_literals.clear();
+        mp_distance.clear();
+
+    
+
+        readHeadderType();
+
+
+        if(!header_settings.compressed){
+            getbits(5); //padding bits;
+            int len = getbits(8) | (getbits(8)<<8);
+            int nlen = getbits(8) | (getbits(8)<<8);
+
+            if(!nlen == (~len) & 0xFFFF) throw std::runtime_error("Stream invalid nlen not compliment of len");
+
+            while(len--){
+                outBuffWrite(getbits(8));
+            }
+        }else{
+    
+        if(header_settings.dynamicHuffman) readBlockFormat();
+        else initializeFixedMap();
+
+        std::cout<<"HLIT: "<<header_settings.HLIT;
+        std::cout<<"HDIST: "<<header_settings.HDIST;
+        std::cout<<"HCLEN: "<<header_settings.HCLEN;
+    
+        while(true){
+            int symbol = parseLiteral();
+            assert(symbol >= 0);
+
+            if(symbol == 256){
+                outBuffWrite(0, 1);
+                break;
+            }
+        
+            if(symbol >=257){
+                int len = parseLiteral(1, symbol);
+                int dist = parseDist();
+
+                findMatch(len, dist); //calls a function that handles buffinsertions
+                continue;
+            }else if (symbol < 257){
+                outBuffWrite(symbol);
+                continue;
+            }
+            throw std::runtime_error("Unexpected finish");
+        }
+        }
+
+        if(header_settings.final) break;
+    }
+    
+    outBuffWrite(0, 1);
+
+    out.close();
+    in.close();
+
+    cleanup();
+
+    /*
+    TODO
+    6.Add a menu if it works :(
+    7.Try and use this code to fix the archiver(broken rn) also dont forget to add
+    fixed for compression and also check if binary heap isnt broken(might be, really high chance)
+    */
+
+
+    }
+    catch(const std::exception& e){
+        outBuffWrite(0, 1); //idk if i should dump when error
+        out.close();
+        in.close();
+        cleanup();
+        window.clear();
+        outbuffer.clear();
+        inbuffer.clear();
+        throw std::runtime_error(e.what());
+    }
+
+    std::cout<<"\nYes finnaly";
+
+    return 0;
+}
+
+void fillInbuff(){
+    assert(pBitpos <= pBitpos_end);
+
+    //maybe do a windows like in lz77a
+    auto len = pBitpos_end-pBitpos;//how many symbols are still valid
+
+    assert (len >=0);
+    //if(len) memmove(inbuffer.data(), pBitpos, len); //replace with roateate maybe
+    if(len) std::rotate(inbuffer.begin(), inbuffer.begin() + std::distance(inbuffer.data(), pBitpos), inbuffer.end());//should rotate
+
+    in.read(reinterpret_cast<char *>(inbuffer.data()+len), INBUFFER_SIZE-len);
+
+    assert(in.gcount() <= INBUFFER_SIZE-len);
+
+
+    //if(in.gcount() != INBUFFER_SIZE-len) pBitpos_end = inbuffer.data()+len+in.gcount(); 
+
+    pBitpos_end = inbuffer.data()+in.gcount()+len;
+    pBitpos = inbuffer.data();
+
+}
+
+void consumebits(const bool empty){
+    //add function to insert the data into the window
+    int rm;
+
+    if(empty){
+        std::cerr<<"\nWarning! usage of emptybuffer argument\n";
+        bitbuf = 0;
+        bitpos = 0;
+        rm=64;
+    }else{
+        rm = bitpos - (bitpos%8); //bits to remove
+        assert(rm > 0);
+        
+        if(rm == 64) bitbuf = 0;
+        else bitbuf>>=rm;
+
+        assert(bitpos >= rm);
+
+        bitpos-=rm;
+    }
+
+    assert(pBitpos <= pBitpos_end);
+
+    if(rm/8 > pBitpos_end-pBitpos) fillInbuff();
+
+
+    while(rm > 0 && pBitpos != pBitpos_end){
+        assert(rm>=8 && rm <= 64);
+        bitbuf|=(uint64_t)(*pBitpos) << (64-rm);
+        rm-=8;
+        pBitpos++;
+    }
+
+}
+
+uint32_t getbits(int len){
+    if(len == 0) return 0;
+    assert(len > 0 && len <= 15); //max bits 15
+    uint32_t mask = (1u << len)-1;
+    if(bitpos + len >= 64) consumebits(); //not enough bits;
+    bitpos+=len;
+    return (bitbuf >> (bitpos-len)) & mask;
 
 }
 
 
-//IDEA 
-//WINDOW is only for the already proccesed codes that need to be outputtted and are used for matching
-//INBUFFER is where we store the data we read
-//bitbuff is the working buffer its where we fill reuse and move i think
-
-
 void readHeadderType(){
-    bitbuf = *pBitpos;
-    header_settings.final = ((bitbuf>>bitpos) & 0b1);
-    bitpos+=1;
-    switch ((bitbuf>>bitpos)&0b11){
+    header_settings.final = getbits(1); // ((bitbuf>>bitpos) & 0b1);
+    switch (getbits(2)){ //(bitbuf>>bitpos)&0b11
     case 3:
+        printf("%02X \n", bitbuf);
+        //vHEXdump(reinterpret_cast<uint8_t*>(bitbuf), 64/8);
         header_settings.reserved = 1;
         throw std::runtime_error("Code 11 isnt allowed");
         break;
@@ -83,104 +282,325 @@ void readHeadderType(){
         header_settings.compressed = 0;
         break;
     }
-    bitpos+=2;
-    int hlit;
-    hlit = (bitbuf>>bitpos) & 0x1F;
-    bitpos+=5;
-    int hdist;
-    hdist = (bitbuf>>bitpos) & 0x1F;
-    bitpos+=5;
-    int hclen;
-    hclen = (bitbuf>>bitpos) & 0xF;
-    bitpos+=4;
 
-    header_settings.HLIT = hlit+257;
+}
+
+void initializeFixedMap(){
+    /*
+    Only use with fixed type 01
+    */
+    int e=0;
+    for(int i= 48; i<=191; i++) mp_literals.insert({(1<<8)| i, e++});
+    for(int i= 400; i<=511; i++) mp_literals.insert({(1<<9) | i, e++});
+    for(int i=0; i<=23; i++) mp_literals.insert({(1<<7)| i, e++});
+    for(int i=192; i<=199; i++) mp_literals.insert({(1<<8) | i, e++});
+
+    for(int i=0; i<=31; i++){
+        //5bits long
+        mp_distance.insert({(1 << 5)|i, i});
+    }
+
+}
+
+void readBlockFormat(){
+    printf("%016llx\n", (unsigned long long)bitbuf);
+
+    int hlit = getbits(5); //(bitbuf>>bitpos) & 0x1F;
+    //bitpos+=5;
+    int hdist = getbits(5); //(bitbuf>>bitpos) & 0x1F;
+    //bitpos+=5;
+    int hclen = getbits(4); //(bitbuf>>bitpos) & 0xF;
+    //bitpos+=4;
+    header_settings.HLIT = hlit+257; 
     header_settings.HDIST = hdist+1;    
     header_settings.HCLEN  = hclen+4;
+    //maybe combine it into a oneliner like getbit(5)+257
+    //add check so hlit hdist hclen are inside the limits
+    
+    std::cout<<"\nHLIT: "<<header_settings.HLIT;
+    std::cout<<"\nHDIST: "<<header_settings.HDIST;
+    std::cout<<"\nHCLEN: "<<header_settings.HCLEN;
 
-    HEXdump(bitbuf);
+    //HEXdump(bitbuf);
+
+    //HCLEN
+    //tmp array subject to changes
+
+    std::unordered_map<int, int> mp; //code arr_index
+
+    assert(header_settings.HCLEN >=4 && header_settings.HCLEN <=19); //maybe use a if and a custom output
+
+    std::vector<canonical_struct> code_len(header_settings.HCLEN);
+
+    for(int i=0; i<code_len.size(); i++){
+        code_len[i].len = getbits(3);
+        code_len[i].symbol = CCL_order[i];
+    }
+    
+
+    
+    std::cout<<"\nPresort HCLEN lengths";
+    for(auto &x : code_len){
+        std::cout<<"\nSymbol: "<<x.symbol<<" Len: "<<x.len;
+    }
+    std::cout<<"\n";
+
+
+    //sorting
+    merge::sort(code_len,[](canonical_struct &a, canonical_struct &b){
+        if(a.len == b.len) return a.symbol < b.symbol;
+        return a.len < b.len;
+    });
+
+
+    std::cout<<"\nAfter sort HCLEN lengths";
+    for(auto &x : code_len){
+        std::cout<<"\nSymbol: "<<x.symbol<<" Len: "<<x.len;
+    }
+    std::cout<<"\n";
+
+    //Theb bug is either in canonical huffman or in constructLenArray
+
+
+    canonicalHuffman(code_len, mp);
+
+    std::cout<<"\nCanonical Result and Map data for HCLEN";
+    for(auto &kv : mp){
+        std::cout<<"\n Key: "<<kv.first<<" Value: "<<kv.second;
+    }
+        
+
+    //this should be all for HCLEN
+    //use the HCLEN to do the HLIT and HDIST
+    //HLIT
+
+    std::vector<int> len_vec = constructLenArray(mp);//len for both HDIST and HLIT
+
+
+    std::cout<<"\nHCLEN lengths";
+    for(auto &obj : len_vec){
+        std::cout<<" "<<obj;
+    }
+
+    std::vector<canonical_struct> literal_len(header_settings.HLIT);
+    std::vector<canonical_struct> distance_len(header_settings.HDIST);
+
+    for(int i=0; i<header_settings.HLIT; i++){
+        literal_len[i].len = len_vec[i];
+        literal_len[i].symbol = i;
+    }
+
+    merge::sort(literal_len, [](canonical_struct &a, canonical_struct &b){
+        if(a.len == b.len) return a.symbol < b.symbol;
+        return a.len < b.len;
+    });
+
+    int check = 0;
+    std::cout<<"\n";
+    for(auto &x : literal_len){
+        if(x.len!=0) check++;
+        std::cout<<" "<<x.len;
+    }
+
+    canonicalHuffman(literal_len, mp_literals);
+
+    if(check != mp_literals.size()) throw std::runtime_error("Map threw and element");
+
+
+    //HDIST
+    
+    for(int i=header_settings.HLIT; i<len_vec.size(); i++){
+        int j = i - header_settings.HLIT;
+        distance_len[j].len = len_vec[i];
+        distance_len[j].symbol = j;
+    }
+
+    if(distance_len.size() == 1 && distance_len[0].len == 0){
+        header_settings.ALL_LITERALS = true;
+    }else{
+
+
+
+        merge::sort(distance_len, [](canonical_struct &a, canonical_struct &b){
+            if(a.len == b.len) return a.symbol < b.symbol;
+            return a.len < b.len;
+        });
+        canonicalHuffman(distance_len, mp_distance);
+    }
+
+    std::cout<<"\n###Literal lengths###";
+    for(auto &obj : literal_len){
+        std::cout<<"\n Length: "<<obj.len<<" Symbol "<<obj.symbol;
+    }
+    std::cout<<"\n###Distance lenghts###";
+    for(auto &obj : distance_len){
+        std::cout<<"\n Length: "<<obj.len<<" Symbol "<<obj.symbol;
+    }
+
 
 }
-/*
-void readAlfa();
 
-//Note the shift is moded so if buffer <<=64 then it does nothing
-//
+std::vector<int> constructLenArray(std::unordered_map<int, int> &mp){
+    
+    std::vector<int> len_vec(header_settings.HLIT + header_settings.HDIST);
 
-void fillBitBuff(){
-    int bits = bitpos/8;
-    bits*=8;
-    bitbuf>>=bits;
-    bitpos-=bits;
-    while (bits > 0){
-        bits-=8;
-        if(56-bits)
-        bitbuf|= (uint64_t)(*pBitpos++) << (56 - bits);
+    auto it = len_vec.begin();
+    while(it < len_vec.end()){
+        int code = 1;
+        int len = 0;
+        std::unordered_map<int,int>::iterator mit;
+
+        do{
+            if(len > 15) throw std::runtime_error("constructLenArray: code too long");
+            code  = (code << 1) | getbits(1);
+            len++;
+            mit = mp.find(code);
+
+        }while(mit == mp.end());
+
+
+        if(mit->second < 0 || mit->second > 18) throw std::runtime_error("Code index invalid"); //prob useless but doesnt hurt
+
+        int fill_symbol = 0;
+        int fill_size = 0;
+        int extra_len;
+
+        switch(mit->second){
+            case 18:
+                extra_len = getbits(7);
+                fill_size = 11+extra_len;
+                if(11+extra_len > len_vec.end()-it) throw std::runtime_error("Brooken"); //idk :P
+                fill_symbol = 0;
+                break;
+            case 17:    
+                extra_len = getbits(3);
+                fill_size = 3+extra_len;
+                fill_symbol = 0;
+                break;
+            case 16:
+                if(it==len_vec.begin()) throw std::runtime_error("HLIT cant start with len code 16");
+                extra_len = getbits(2);
+                fill_size = 3+extra_len;
+                fill_symbol = *(it-1);
+                break;
+            default:
+                fill_symbol = mit->second;
+                fill_size = 1;
+        }
+        assert(it+fill_size <= len_vec.end());
+        std::fill(it, it+fill_size, fill_symbol);
+        it+=fill_size;
+    }
+
+    return len_vec;
+}
+
+void canonicalHuffman(std::vector<canonical_struct> &arr, std::unordered_map<int, int> &mp){
+    assert(arr.size());
+
+    int len=0;
+    int code=0;
+
+    for(auto &obj : arr){
+        if(obj.len == 0) continue;
+        assert(obj.len <= 15);
+        if(obj.len > len) code <<= (obj.len-len);
+        len=obj.len;
+        assert(len > 0);
+        mp.insert({(1<<len)| code , obj.symbol});
+        code++;
     }
 }
 
-void readCodes(){
-
-}
-
-void readDist(){
-
-}
-
-void readExtra(){
-
-}
-
-void buildCanonical(){
-
-}
-
-uint8_t extractBitBuff(int len){*
-*/
-
-void fillInbuff(){
-    //maybe do a windows like in lz77a
-
-    int len = pBitpos_end-pBitpos;
-    assert (len >=0);
-    if(len) memmove(inbuffer, pBitpos, len);
-
-    in.read(reinterpret_cast<char *>(inbuffer+len), INBUFFER_SIZE-len);
-
-    assert(in.gcount() <= INBUFFER_SIZE-len);
-    if(in.gcount() != INBUFFER_SIZE-len) pBitpos_end = inbuffer+in.gcount()+len; 
-    pBitpos = inbuffer;
-
-}
-
-void moveBitBuffwindows(){
-    //add function to insert the data into the window
-    int rm = bitpos - (bitpos%8);
-    assert(rm >= 0);
-    
-    if(rm == 64) bitbuf=0; //mobing by buff size will do nothing
-    else bitbuf>>=rm;
-    bitpos-=rm;
-    
-    if( rm/8 > abs(pBitpos_end-pBitpos)) fillInbuff();
-
-    while(rm > 0 && pBitpos != pBitpos_end){
-        bitbuf|=(uint64_t)(*pBitpos++) << (64 - rm);
-        rm-=8;
+int parseCode(std::unordered_map<int, int> &mp){
+    int code = 1;
+    int len = 0;
+    while(len <= 15){
+        code = (code << 1) | getbits(1);
+        len++;
+        auto it = mp.find(code);
+        if(it != mp.end()) return it->second;
     }
 
+    throw std::runtime_error("parseLiteral: Code len bigger than 15, couldnt find the code");
 }
 
-uint32_t getbits(int len){
-    assert(len <= 15); //max bits 15
-    assert(len >= 0);
-    uint32_t mask = (1u << len) -1;
-    if(bitpos + len > 64) moveBitBuffwindows(); //not enough bits;
-    bitpos+=len;
-    return (bitbuf >> (bitpos-len)) & mask;
-}
-//add smth to 
+int parseLiteral(bool parseLen, int symbol){
+    assert(symbol <= 285);
+    if(parseLen){
+        assert(symbol>=257);
+        
+        int len = lengthTable[symbol-257].baselength;
+        int extra_bits = lengthTable[symbol-257].extraBits;
 
+        int extra_len = getbits(extra_bits);
+
+        return len+extra_len;
+    }
+    return parseCode(mp_literals);
+}
+
+int parseDist(){
+    auto symbol = parseCode(mp_distance);
+    assert(symbol < 30);
+
+    int dist = distTable[symbol].basedist;
+    int extra_bits = distTable[symbol].extraBits;
+
+    int extra_dist = getbits(extra_bits);
+    
+    return dist+extra_dist;
+}
+
+
+void findMatch(int len, int dist){
+    if(dist > WINDOW_SIZE || dist > window_indx) throw std::runtime_error("Dist is bigger than 36KB or windwos is filled");
+
+    uint64_t lookup = window_indx-dist;
+
+    while(len){
+        outBuffWrite(window[lookup%WINDOW_SIZE]);
+        lookup++;
+        len--;
+    }
+}
+
+void outBuffWrite(uint8_t ch, bool f_out){
+    if(outbuff_indx >= outbuffer.size() || f_out){
+        int attempts = 0;
+        while(attempts < 2){
+            try{
+                out.write(reinterpret_cast<char*>(outbuffer.data()), outbuff_indx);
+
+                if(!out || out.fail()){
+                    throw std::runtime_error("write failed");
+                }
+                break;
+
+            }catch(const std::exception&){
+                out.clear();
+                attempts++;
+                if(attempts == 2) {
+                    cleanup();
+                    throw std::runtime_error("Failed to write execution stopped");
+                }
+            }
+        }
+        outbuff_indx=0;
+    }
+
+    if(!f_out){
+        outbuffer[outbuff_indx] = ch;//add ch to outbuff
+        window[window_indx%WINDOW_SIZE] = ch;
+        window_indx++;
+        outbuff_indx++;
+    }
+}
+
+void cleanup(){
+    mp_literals.clear();
+    mp_distance.clear();
+}
 
 void vHEXdump(const uint8_t *arr, int len){
     //uint8_t *pAar = (uint8_t*)arr;
@@ -189,44 +609,4 @@ void vHEXdump(const uint8_t *arr, int len){
         printf("%02X ", arr[i]);
     }
 
-}
-
-void HEXdump(uint32_t arr){
-    uint8_t tmp[4];
-    for(int i=0; i<4; i++){
-        tmp[i] = (arr & 0xFF);
-        arr>>=8;
-    }
-
-    for(int i=0; i<4; i++){
-        printf("%02X ", tmp[i]);
-    }
-}
-
-void test(){
-    std::string test = "Hello this is a test i the test code is 5555 and the user name is lain iwakura";
-    memcpy(inbuffer, test.data(), test.size());
-    pBitpos_end = inbuffer + test.size();
-    pBitpos = inbuffer;
-    bitpos = 64;
-    moveBitBuffwindows();
-
-    uint8_t byte;
-
-    const int x = test.size();
-
-    uint8_t *tmp = new uint8_t[test.size()*2];
-    uint8_t *pos = &tmp[0];
-
-    try{
-        while(pBitpos != pBitpos_end || bitbuf){ //maybe use bitpos instead of bitbuff
-            *pos = getbits(4);
-            pos++;
-        }
-    }catch(...){
-        std::cout<<"\n\n\n";
-        vHEXdump(tmp, test.size());
-    }
-    std::cout<<"\n\n\n";
-    vHEXdump(tmp, test.size()*2);
 }

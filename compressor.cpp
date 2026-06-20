@@ -1,348 +1,564 @@
-#define DEPRECATED
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <cstdint>
+#include <vector>
+#include <memory>
+#include <unordered_map>
+#include "utils.hpp"
+#include "lz77.hpp"
 
-#ifndef DEPRECATED
-
-    #include <cstdio>
-    #include <cstdlib>
-    #include <string>
-    #include <iostream>
-    #include <fstream>
-    #include <cstdint>
-    #include <vector>
-    #include <memory>
-    #include <unordered_map>
-    #include "utils.h"
-    #include "lz77.hpp"
-
-
-    constexpr int maxCodeValue = 257;
-    const int MAX_BITS = 15;
+/*
+NOTE: using a smaller buffer might reduce how much memory is allocated 
+as we can switch to uint32t instead of 64
 
 
-    int values[maxCodeValue] = {0};
-    //256 end of block
 
-    int bl_count[maxCodeValue];
+*/
+//freq Len code
+struct FLC {
+    int freq=0;
+    int len=0;
+    uint64_t code =0;
+};
 
 
-    int len[deflateBitLength] = {0};
-    int dist[deflateBitDist] = {0};
+const int MAX_BITS = 15;
+
+constexpr int maxCodeValue = 286;
+constexpr int maxDistValue = 30;
+
+FLC literal[maxCodeValue] = {};
+FLC dist[maxDistValue] = {};
+FLC CCL[19] = {};
 
 
-    std::ofstream replace_this("output.arhv"); 
+std::vector<bn_heap::Node> tree;
 
-    //Tree root;
+int HLIT=257;
+int HDIST=1;
+int HCLEN=4;
 
-    std::vector<std::unique_ptr<Tree>> unsorted_tree; //Vector containing the branches that still need sorting
-    std::vector<std::unique_ptr<Tree>> unsorted_len;
-    std::vector<std::unique_ptr<Tree>> unsorted_dist;
 
-    int lcode(int x);
-    int dcode(int x);
-    void buildTree(std::vector<std::unique_ptr<Tree>> &tree);
-    void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr);
-    void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic);
-    void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer);
-    void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len);
-    void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic, bits b, const int index);
-    void flush(uint64_t &buffer, int &freebits);
+enum CCL_mode {WRITE, COUNT};
 
-    int main(int argc, char* argv[]){
 
-        std::unordered_map<int, bits> ctob; // key value ctob[key] == value / ctob.insert({key, value})
-        std::unordered_map<int, bits> ctol; 
-        std::unordered_map<int, bits> ctod;
-        //bits
-        //length
 
-        std::ifstream file;
-        
+void processDictionaryRun(CCL_mode mode, uint64_t&buffer, int &bitpos);
+void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos);
+void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos);
+void buildTree();
+void createLen(std::vector<bits> &val_len, FLC *arr,  uint16_t len, int i);
+void createCodes(FLC *arr);
+uint64_t revCodes(uint64_t code, int len);
+void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos);
+void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len);
+void flush(uint64_t &buffer, int &bitpos, bool final=0);
 
-        unsorted_tree.reserve(257);
-        //std::fstream file("example.txt", std::ios::binary | std::ios::in); //std::ios::binary, std::ios::in
+void printHuffmanTable(const char* name, FLC* arr, int size);
+void printSortedLengths(FLC* arr, int size);
 
-        if(argc==1){
-            //Print smth like hello and usage
-            //Maybe even create a menue for smth like selecting
-            //but probably not
-        }else if(argc==2){
-            //Selected output file no specific name
-        }else {
-            //Added remote name for output file
+std::ofstream out("out.bin", std::ios::binary);
+
+
+
+
+int main(){
+    if (!out) {
+        std::cerr << "Failed to open file\n";
+    }
+
+    //tree.reserve(600); //should add smth to improve performance
+
+    auto lzed = lz77_token("example.txt");
+    //creating a frequency array from tokens
+
+
+    for(token &tk : lzed){
+        if(tk.type == match){
+            if(lcode(tk.len) < 0) throw std::runtime_error("Lcode is negative");
+            if(dcode(tk.dist) < 0) throw std::runtime_error("Dcode is negative");
+
+
+
+            literal[257 + lcode(tk.len)].freq++;
+            dist[dcode(tk.dist)].freq++;
         }
+        else literal[(uint8_t)(tk.data)].freq++;
 
-        /*
-        
+    }
+    for(int i=0; i<maxDistValue; i++){
+        if(dist[i].freq) break;
+        if(i == maxDistValue-1) dist[0].freq = 1;
+    }
+    literal[256].freq++;  //for end of block
 
-        file.open("example.txt", std::ios::binary | std::ios::ate); //Open the file in binary mode and puts the pointer to the end of file with ate
-        if(!file.is_open()) throw std::runtime_error("Couldnt open the target file"); //Checks if the file opened
-        uint64_t size = file.tellg(); //Reads the size of the file
-        std::string buff(size, '\0'); //Creates the buffer
-        file.seekg(0); //Goes to pos 0
-        if(file.read(&buff[0], size)){
-            std::cout<<buff<<"\n";        
-        } //Reads and outputs the file
 
-        //Get the frequency of the chars in the buffer inside the ascii vallue array
-        for (char &element : buff){
-            values[(int)(element)]++;  //yea that is broke or maybe not who knows
+    //literal length codes
+    
+    for(int i=0; i<maxCodeValue; i++)
+    if(literal[i].freq){
+        bn_heap::insert({i, literal[i].freq});
+    } 
+
+    buildTree();
+    createCodes(literal);
+    tree.clear();
+    bn_heap::clear();
+    
+    //dist codes
+    for(int i=0; i<maxDistValue; i++)
+    if(dist[i].freq){
+        bn_heap::insert({i, dist[i].freq});
+    } 
+
+    buildTree();
+    createCodes(dist);
+    tree.clear();
+    bn_heap::clear();
+
+    uint64_t buffer = 0;
+    int bitpos = 0; //max is 64
+
+    processDictionaryRun(COUNT, buffer, bitpos);
+
+    for(int i=0; i<19; i++)
+        if(CCL[i].freq){
+            bn_heap::insert({i, CCL[i].freq});
+    }
+    
+    buildTree();
+    createCodes(CCL);
+    tree.clear();
+    bn_heap::clear();
+
+
+    printHuffmanTable("LITERAL/LEN CODES", literal, maxCodeValue);
+    printHuffmanTable("DIST CODES", dist, maxDistValue);
+    printHuffmanTable("CCL CODES", CCL, 19);
+
+    printSortedLengths(literal, maxCodeValue);
+    printSortedLengths(dist, maxDistValue);
+    printSortedLengths(CCL, 19);
+
+
+
+
+    //Creating the header and blocks and outputtign the data
+
+
+    HLIT = maxCodeValue-1;
+    while(HLIT >= 257 &&  literal[HLIT].len == 0){
+        HLIT--;
+    }
+
+    HDIST = maxDistValue-1;
+    while(HDIST >= 1 && dist[HDIST].len == 0){
+        HDIST--;
+    }
+
+    HCLEN = 18;
+    while (HCLEN >= 4 && CCL[CCL_order[HCLEN]].len == 0){
+        HCLEN--;
+    }
+
+
+    
+    HLIT= (HLIT+1)-257; 
+    HDIST = (HDIST+1)-1; //indexing now this should really work as intented
+    HCLEN=(HCLEN+1)-4; //x 3 bits
+
+    if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
+    
+
+    //std::string buffer;
+
+    buffer = 0;
+    bitpos = 0; //max is 64
+
+
+    bool compresed = true;
+    bool dynamicHuffman = true;
+    bool lastblock = true;
+
+    if (lastblock) buffer |= 1;
+    bitpos++;
+
+    if(compresed){
+        if(dynamicHuffman) buffer |= (0b10 << bitpos); 
+        else buffer |= (0b01 << bitpos); 
+    }else{
+        buffer |= (0b11 << bitpos); //error
+    }
+    bitpos+=2;
+
+
+    //add static cast uint64t to all codes that are written into the buffer
+    //cuz its done in int space not uint
+
+
+    //HLIT 5bits
+
+    buffer |= (static_cast<uint64_t>(HLIT) << bitpos);
+    bitpos+=5;
+
+
+    //HDIST 5 bits
+
+    buffer |= (static_cast<uint64_t>(HDIST) << bitpos);
+    bitpos+=5;
+
+    //HCLEN 4 bits
+
+    buffer |= (static_cast<uint64_t>(HCLEN) << bitpos);
+    bitpos+=4;
+
+
+    std::cout<<"HLIT: "<<HLIT+257;
+    std::cout<<"HDIST: "<<HDIST+1;
+    std::cout<<"HCLEN: "<<HCLEN+4<<"\n";
+
+
+    //CCL output
+
+
+
+    for(int i=0; i<(HCLEN+4); i++){
+        int key = CCL_order[i];
+        if(CCL[key].len > 7) throw std::runtime_error("Too long aint ya");
+        if(bitpos > 61) flush(buffer, bitpos);
+        buffer|=(static_cast<uint64_t>(CCL[key].len & 0x7) << bitpos);
+        bitpos+=3;
+    }
+
+
+    //Dictionay output with ccl
+    processDictionaryRun(WRITE, buffer, bitpos);
+    //outputting the compressed data
+
+    for(token &t : lzed){
+        if(t.type == match){
+            writeBitcode(literal[257 + lcode(t.len)].code, literal[257 + lcode(t.len)].len, buffer, bitpos); //wait what about dcode and lcode ?? 
+            writeExtra(t.len, buffer, bitpos, true);
+            writeBitcode(dist[dcode(t.dist)].code, dist[dcode(t.dist)].len, buffer, bitpos);
+            writeExtra(t.dist, buffer, bitpos, false);
         }
-
-        //Create a vector of all the elements and idk do tree stuff
-
-
-        for(int i = 0; i < 256; i++){
-            if(values[i] >= 1){
-                unsorted_tree.push_back(std::make_unique<Tree>(static_cast<unsigned char>(i), values[i]));
-                std::cout<<"\n"<<unsorted_tree.back()->data<<"\t"<<unsorted_tree.back()->freq<<"\n";
-            }
+        else{
+            writeBitcode(literal[t.data].code, literal[t.data].len, buffer, bitpos);
         }
-    */
+    }
 
-        auto lzed = lz77_token("file.example");
+    writeBitcode(literal[256].code, literal[256].len, buffer, bitpos); //this should be it i think
+    flush(buffer, bitpos, 1);
 
-        for(token &tk : lzed){
-                if(tk.type == match) values[256]++;
-                else values[(int)(tk.data)]++;
+    out.close();
+    return 0;
+
+    std::cerr<<"THE HDIST HCLEN and HLIN arent computed correctly so it doesnt work";
 
 
-                len[lcode(tk.len)]++;
-                len[dcode(tk.dist)]++;
 
-                /*
-                len[(int)(tk.len)]++;
-                dist[(int)(tk.dist)]++;
-                */
+    //now its decompresser time
+}
+
+void outputDictionary(const int prev, int &prev_count, uint64_t &buffer, int &bitpos){
+     
+    outputCCLCode(prev, 0, buffer, bitpos);
+    prev_count--;
+
+    int repeat_len;
+    int extra;
+    
+    if(prev > 0) while(prev_count >= 3){
+        repeat_len = std::min(prev_count, 6);
+        extra = repeat_len-3;
+
+        outputCCLCode(16, extra, buffer, bitpos);
+
+        prev_count-=repeat_len;
+    }
+   
+
+    if(prev == 0){
+        while(prev_count >= 11){
+            repeat_len = std::min(prev_count, 138);
+            extra = repeat_len - 11;
+            outputCCLCode(18, extra, buffer, bitpos);
+            prev_count-=repeat_len;
         }
+        while (prev_count >= 3){
+            repeat_len = std::min(prev_count, 10);
+            extra = repeat_len - 3;
+            outputCCLCode(17, extra, buffer, bitpos);
+            prev_count-=repeat_len;
+        }
+    }
+
+    while(prev_count > 0){
+        outputCCLCode(prev, 0, buffer, bitpos);
+        prev_count--;
+    }
+}
+
+void createCCLFreq(const int prev, int &prev_count){
+    prev_count--;
+
+    int repeat_len;
+    int extra; 
+
+    if(prev > 0) while(prev_count >= 3){
+        repeat_len = std::min(prev_count, 6);
+        CCL[16].freq += repeat_len;
+        prev_count-=repeat_len;
+    }
+   
+
+    if(prev == 0){
+        while(prev_count >= 11){
+            repeat_len = std::min(prev_count, 138);
+            CCL[18].freq += repeat_len;
+            prev_count-=repeat_len;
+        }
+        while (prev_count >= 3){
+            repeat_len = std::min(prev_count, 10);
+            CCL[17].freq += repeat_len;
+            prev_count-=repeat_len;
+        }
+    }
 
 
+    while(prev_count > 0){
+        CCL[prev].freq += prev_count;
+        prev_count = 0;
+    }
+}
 
-        createUnsorted(values, 257, unsorted_tree);
-        createUnsorted(len, deflateBitDist, unsorted_len);
-        createUnsorted(dist, deflateBitDist, unsorted_dist);
+void outputCCLCode(int key, int extra, uint64_t &buffer, int &bitpos){
+    int extr_len;
 
-        merge::sort(unsorted_tree, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
-        merge::sort(unsorted_len, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
-        merge::sort(unsorted_dist, []( const std::unique_ptr<Tree> &a, const std::unique_ptr<Tree> &b ){return a->freq < b->freq;});
+    switch (key){
+    case 16:
+        extr_len = 2;
+        break;
+    case 17:
+        extr_len = 3;
+        break;
+    case 18:
+        extr_len = 7;  
+        break;
+    default:
+        extr_len = 0;
+        break;
+    }
 
+    uint64_t code = revCodes(CCL[key].code, CCL[key].len);
 
-        buildTree(unsorted_tree);
-        buildTree(unsorted_len);
-        buildTree(unsorted_dist);
+    if(bitpos + CCL[key].len > 64) flush(buffer, bitpos);
+    buffer|= (code << bitpos);
+    bitpos+=CCL[key].len;
+    
 
-        auto rootHuff = std::move(unsorted_tree.at(0));
-        auto rootLen = std::move(unsorted_len.at(0));
-        auto rootDist = std::move(unsorted_dist.at(0));
-        unsorted_tree.clear();
-        unsorted_len.clear();
-        unsorted_dist.clear();
+    if(bitpos + extr_len > 64) flush(buffer, bitpos);
+    code = extra;
+    buffer|= (code<<bitpos);
+    bitpos+=extr_len;
+}
 
-        //outputing the raw data :3
+void buildTree(){
+    using namespace bn_heap;
 
-        createBitcode(rootHuff, ctob);
-        createBitcode(rootLen, ctol);
-        createBitcode(rootDist, ctod);
+     //fix so value isnt uint and that it gets initial value /0 or smth different than -1 
+    Node left = extrt();
+    Node right = extrt();
 
-        
+    //add size to bnheap to fix random latent buggs
+    //fix this either change uint32 to it so -1 does overflow or
+    //add isleaf to node and it wont push and last
+    //can add a size function to check before extracting
+    while(left.value != -1 && right.value != -1){
+        Node parent;
+        tree.push_back(left);
+        tree.push_back(right);
 
+        parent.freq = left.freq + right.freq;
+        parent.left = tree.size()-2;
+        parent.right = tree.size()-1;
 
-        uint64_t outBuffer = 0;
-        int freebits=64;
-        //10 compresed with dynamic huffman
+        insert(parent);
 
-        //need to output the dictiuonary and canonicals
-        std::string header;
-        header = 0b10; //comrpesion type
-        
+        left = extrt();
+        right = extrt();
+    }
 
+    if(right.value == -1){
+        tree.push_back(left);
+    }
+    //if(parent.left == -1){
+    //    parent = left;
+    //}
+    //tree.push_back(parent); //root 
 
+}
 
-        for(token &t : lzed){
-            if(t.type == match){
+void createLen(std::vector<bits> &val_len, FLC *arr,  uint16_t len, int i){
+    //len++;
 
-                writeBitcode(256, ctob, freebits, outBuffer);
+    if(len > MAX_BITS) throw std::runtime_error("BITS are tooo long");
 
+    if(tree[i].left == -1 && tree[i].right == -1){
+        if(len == 0) len=1;
+        arr[tree[i].value].len = len;
+        val_len.push_back({tree[i].value, len});
+        return;
+    }
 
-                /*
-                uint64_t disp = ctob[256].length;
+    if(tree[i].left >= 0){
+        createLen(val_len, arr, len+1, tree[i].left);
+    }
+    if(tree[i].right >= 0){
+        createLen(val_len, arr, len+1, tree[i].right);
+    }
+}
 
-                //I forgot about the length and distnace :/
-
-                if(disp > freebits) flush(outBuffer, freebits);
-                if(disp < freebits){
-                    outBuffer = (outBuffer<<disp) | ctob[256].bits;
-                    freebits-=disp;
-                }
-                */
-
-                writeBitcode(t.len, ctol, freebits, outBuffer);
-
-                writeExtra(t.len, freebits, outBuffer, 1);
-
-                /*
-                int indx = lcode(t.dist);
-
-                int disp = lengthTable[indx].extraBits;
-
-                int code = (ctol[t.dist].bits << disp) | (t.dist - lengthTable[indx].baselength);
-                */  
-
-
-                writeBitcode(t.dist, ctod, freebits, outBuffer);
-                writeExtra(t.dist, freebits, outBuffer, 0);
-                
-                
-
+void createCodes(FLC *arr){
+    std::vector<bits> value_len;
+    
+    //canonical might be broken fix it :/ what a bitch
     /*
-                disp = ctod[t.dist].length;
-                if(disp > freebits) flush(outBuffer, freebits);
-                else{
-                    outBuffer = (outBuffer<<disp) | ctod[t.dist].bits;
-                    freebits-=disp;
-                }
+    !!! IF NO LEN OR NO DIST THERS NO FUNCTION TO FIX IT
+    !!! THE RESPONSE SHOULD BE THE FIRST SYMBOL HAS LENGHT 0
+    !!! so if ARR is empty then HDIST = 1(1-1=0) and the next code is 0
+    
     */
 
-    /*
-                disp = ctol[t.len].length;
-                if(disp > freebits) flush(outBuffer, freebits);
-                else{
-                    outBuffer = (outBuffer<<disp) | ctol[t.len].bits;
-                    freebits-=disp;
-                }
-    */
-            
-            }else{
+    createLen(value_len, arr, 0, tree.size()-1); //last element is root
 
-                writeBitcode(t.data, ctob, freebits, outBuffer);
+    merge::sort(value_len,[](const bits &a, const bits &b){
+        if(a.length == b.length)
+            return a.value < b.value;
+        return a.length < b.length;
+    }); //ascending
 
-                /*
-                int chr = t.data;
-                uint64_t disp = ctob[chr].length;
-                if(disp > freebits) flush(outBuffer, freebits);
-                if(disp < freebits){
-                    outBuffer = (outBuffer<<disp) | ctob[chr].bits;
-                    freebits-=disp;
-                }
-                */
+
+    uint32_t code = 0;
+    int prev_len = 0;
+
+    for(bits &b : value_len){
+        if(b.length > prev_len) code<<=(b.length-prev_len);
+        arr[b.value].code = code++;
+        prev_len = b.length;
+    }
+
+}
+
+void processDictionaryRun(CCL_mode mode, uint64_t &buffer, int &bitpos){
+    if(mode == WRITE){
+        int prev = literal[0].len;
+        int prev_count = 1;// change from 0 to 1
+
+        for(int i=1; i<(HLIT+257); i++){
+            if(prev == literal[i].len) prev_count++;
+            else{
+                outputDictionary(prev, prev_count, buffer, bitpos);
+                prev = literal[i].len;
+                prev_count = 1;
             }
         }
 
-        //mostly finished need to add the magiccode
+        for(int i=0; i<(HDIST+1); i++){
+            if(prev==dist[i].len) prev_count++;
+            else{ 
+                outputDictionary(prev, prev_count, buffer, bitpos);
+                prev = dist[i].len;
+                prev_count = 1;
+                continue;
+            }
+        }
+        outputDictionary(prev, prev_count, buffer, bitpos);
+
+
+    }else{
         
-        //10 compresed with dynamic huffman
-
-
-        return 0;
-
-    }   
-
-    //left 0 right 1
-
-    void createUnsorted(int *arr, int size, std::vector<std::unique_ptr<Tree>> &trr){
-        for(int i=0; i<size; i++){
-            if(arr[i] >= 1) trr.push_back(std::make_unique<Tree>(i, values[i]));
+    int prev = literal[0].len;
+    int prev_count=1;
+    for(int i=1; i<maxCodeValue; i++){
+        if(prev == literal[i].len) prev_count++;
+        else{
+            createCCLFreq(prev, prev_count);
+            prev = literal[i].len;
+            prev_count = 1;
         }
     }
-
-    void buildTree(std::vector<std::unique_ptr<Tree>> &tree){
-
-        while(tree.size() > 1){
-            auto right = std::move(tree.back());
-            tree.pop_back();
-            auto left = std::move(tree.back());
-            tree.pop_back();
-
-            auto parent = std::make_unique<Tree>();
-            parent->freq = right->freq + left->freq;
-            parent->left = std::move(left);
-            parent->right = std::move(right);
-            tree.push_back(std::move(parent));
+    for(int i=0; i<maxDistValue; i++){
+        if(prev == dist[i].len) prev_count++;
+        else{
+            createCCLFreq(prev, prev_count);
+            prev = dist[i].len;
+            prev_count = 1;
         }
     }
-
-    void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic, bits b, const int index){
-        b.bits = (b.bits<<1) | index;
-        b.length++;
-
-        if(t->left){
-            createBitcode(t->left, dic, b, 0);
-        }
-        if(t->right){
-            createBitcode(t->right, dic, b, 1);
-        }
-
-
-
-        if(!t->left && !t->right){      
-            uint64_t rev=0;
-            for(int i=0; i < b.length ; i++){
-                rev = (rev<<1) | (b.bits & 1);
-                b.bits>>=1;
-            }
-            dic[t->data] = b;
-        }
-    };
-
-    void createBitcode(std::unique_ptr<Tree> &t, std::unordered_map<int, bits> &dic){
-        bits b;
-        if(t->left){
-            createBitcode(t->left, dic, b, 0);
-        }
-        if(t->right){
-            createBitcode(t->right, dic, b, 1);
-        }
-
-        if(!t->left && !t->right){
-            uint64_t rev=0;
-            for(int i=0; i < b.length ; i++){
-                rev = (rev<<1) | (b.bits & 1);
-                b.bits>>=1;
-            }
-            dic[t->data] = b;
-        }
-    };
-
-    void writeBitcode(int index,std::unordered_map<int, bits> map, int &freebits, uint64_t &outBuffer){
-        uint64_t disp;
-
-        disp = map[index].length;
-        if(disp > freebits) flush(outBuffer, freebits);
-        outBuffer = (outBuffer<<disp) | map[index].bits;
-        freebits-=disp;
-        
+    createCCLFreq(prev, prev_count);
     }
+}
 
-    void writeExtra(int value, int &freebits, uint64_t &outBuffer, const bool len){
-        //forgot i need to add the extra bits so more code and methods for dcode abd lcode
-        uint64_t disp;
-        int indx;
+uint64_t revCodes(uint64_t code, int len){
+    uint64_t rev=0;
+    while (len--)
+    {
+        rev<<=1;
+        rev|= (code & 0b1);
+        code>>=1;
+    }
+    return rev;
+}
 
-        if(len){
-            indx = lcode(value);
-            disp = lengthTable[indx].extraBits;
-            if(disp > freebits) flush(outBuffer, freebits);
-            outBuffer = (outBuffer<<disp) | (value - lengthTable[indx].baselength);
+//only for huffman codes
+void writeBitcode(uint64_t code, int len, uint64_t &buffer, int &bitpos){
+    code = revCodes(code, len);
+    if(bitpos + len > 64) flush(buffer, bitpos);
+    buffer|= (code<<bitpos);
+    bitpos+=len;
+}
 
-        }else{
-            indx = dcode(value);
-            disp = distTable[indx].extraBits;
-            if(disp > freebits) flush(outBuffer, freebits);
-            outBuffer = (outBuffer<<disp) | (value - distTable[indx].basedist);
-        }
+void writeExtra(int key, uint64_t &buffer, int &bitpos,  const bool len){
+    //forgot i need to add the extra bits so more code and methods for dcode abd lcode
+    uint64_t extra;
+    int indx;
 
-        freebits-=disp;
+    if(len){
+        indx = lcode(key);
+        if(indx == -1) throw std::runtime_error("Invalid lenght");
+        extra = lengthTable[indx].extraBits;
+        if(extra+bitpos > 64) flush(buffer, bitpos);
+        buffer|= (static_cast<uint64_t>(key-lengthTable[indx].baselength)<<bitpos);
+
+    }else{
+        indx = dcode(key);
+        extra = distTable[indx].extraBits;
+        if(extra+bitpos > 64) flush(buffer, bitpos);
+        buffer|= (static_cast<uint64_t>(key-distTable[indx].basedist)<<bitpos);
 
     }
+    bitpos+=extra;
+}
 
-    void flush(uint64_t &buffer, int &freebits){
+void flush(uint64_t &buffer, int &bitpos, bool final){
 
-        int bytes = (64-freebits) / 8; 
-        //replace_this.write(reinterpret_cast<char*>(buffer>>(8-bytes)*8), bytes); //replace with string.data so its safer and works
-        replace_this.write(reinterpret_cast<char*>(&buffer), bytes); //should work also this write bottom -> up buffer 
-        freebits+= bytes*8;
-        //good for stirng buffer = ((buffer<<bytes*8) & 0xFFFFFFFFFFFFFFFF)>>bytes*8; //remove the top x bytes
-        buffer <<=bytes*8;
-        buffer >>=bytes*8;
+    int bytes = bitpos/8; //bitpos starts with 0
+    if(final && bitpos%8) bytes++;
+    uint8_t *tmp = new uint8_t[bytes];
+
+    for(int i=0; i<bytes; i++){
+        tmp[i] = buffer & 0xFF;
+        buffer>>=8;
+    }
+    for(int i=0; i<bytes; i++){
+        printf("%02X", tmp[i]);
     }
 
-#endif
+    out.write(reinterpret_cast<char*>(tmp), bytes);
+    bitpos-= bytes*8;
+}
+

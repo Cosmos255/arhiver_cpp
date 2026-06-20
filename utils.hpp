@@ -86,8 +86,25 @@ namespace merge{
         merge_sort(arr, 0, arr.size()-1, method);
         return;
     }
+    
+    template <typename T, typename Compare>
+    void sort(T *arr, int size, const Compare method){
+        std::vector<T> vec;
+        
+        T *pArr = arr;
+        while(pArr != arr+size){
+            vec.push_back(*pArr);
+            pArr++;
+        }
+        sort(vec, method);
 
-
+        pArr = arr;
+        for(T &x : vec){
+            *pArr = x;
+            pArr++;
+        }
+        return;
+    }
 
 };
 
@@ -130,18 +147,10 @@ int lcode(int x);
 int dcode(int x);
 
 
-const int code_symbol = 15; //0-15 for lenghts
-const int cp_previous_symbol = 16; // 3-6 times 2bits
-const int repeat_zero_symbol = 17; //3-10 times 3bits
-const int repeat_zero_long_symbol = 18; //11-13 7bits
-
-const int cp_previous = 3;
-const int repeat_zero = 3;
-const int repeat_zero_long = 11;
-
 
 
 const int CCL_order[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+
 
 /*
 HEADER
