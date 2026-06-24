@@ -9,8 +9,8 @@
 #include <exception>
 #include <algorithm>
 
-std::fstream in("out.bin", std::ios::in | std::ios::binary);
-std::ofstream out("echo.bin", std::ios::out | std::ios::trunc | std::ios::binary);
+std::fstream in;
+std::ofstream out;
 
 constexpr int INBUFFER_SIZE = 16000; //16KB
 constexpr int OUTBUFFER_SIZE = 1<<20; //1MB
@@ -81,15 +81,24 @@ std::unordered_map<int, int> mp_distance;
 
 //rename it do decompress and pass intput file name and output file name/locations
 
-int main(){
+bool main(int argc, char* argv[]){
     try{
+    if(argc < 3) throw std::runtime_error("Not enough arguments");
+    
+    std::string in_filepath = argv[1];
+    std::string out_filepath = argv[2];
+    
+    if(in_filepath.empty() || out_filepath.empty()) throw std::runtime_error("Filepaths are empty");
 
-    if(!in.is_open()) throw std::runtime_error("Couldnt open the file");
+    in.open(in_filepath, std::ios::in | std::ios::binary);
+    out.open(out_filepath, std::ios::out | std::ios::trunc | std::ios::binary);
+
+    if(!in.is_open()) throw std::runtime_error("Couldnt open the input file");
     in.read(reinterpret_cast<char *>(inbuffer.data()), INBUFFER_SIZE); //idk windows size
 
     pBitpos_end = inbuffer.data() + in.gcount();
 
-    if(!out.is_open()) throw std::runtime_error("Couldnt open the file");
+    if(!out.is_open()) throw std::runtime_error("Couldnt open the output file");
 
     std::fill(window.begin(), window.end(), 0);
     window_indx = 0;
@@ -172,12 +181,6 @@ int main(){
 
     cleanup();
 
-    /*
-    TODO
-    6.Add a menu if it works :(
-    7.Try and use this code to fix the archiver(broken rn) also dont forget to add
-    fixed for compression and also check if binary heap isnt broken(might be, really high chance)
-    */
 
 
     }
@@ -189,7 +192,6 @@ int main(){
         window.clear();
         outbuffer.clear();
         inbuffer.clear();
-        //throw std::runtime_error(e.what());
         std::cerr<<e.what()<<"\n";
         return 1; //error
     }
@@ -202,21 +204,16 @@ int main(){
 void fillInbuff(){
     if(pBitpos > pBitpos_end) throw std::runtime_error("Error: Inbuffer pointer past buffer end");
 
-    //maybe do a windows like in lz77a
     auto len = pBitpos_end-pBitpos;//how many symbols are still valid
 
     if(len < 0) throw std::runtime_error("Error: len is negative when filling the buffer");
 
-    //if(len) memmove(inbuffer.data(), pBitpos, len); //replace with roateate maybe
+
     if(len) std::rotate(inbuffer.begin(), inbuffer.begin() + std::distance(inbuffer.data(), pBitpos), inbuffer.end());//should rotate
 
     in.read(reinterpret_cast<char *>(inbuffer.data()+len), INBUFFER_SIZE-len);
 
     if(in.gcount() > INBUFFER_SIZE-len) throw std::runtime_error("Error: in.gcount is bigger than expected");
-
-
-
-    //if(in.gcount() != INBUFFER_SIZE-len) pBitpos_end = inbuffer.data()+len+in.gcount(); 
 
     pBitpos_end = inbuffer.data()+in.gcount()+len;
     pBitpos = inbuffer.data();
@@ -224,7 +221,6 @@ void fillInbuff(){
 }
 
 void consumebits(const bool empty){
-    //add function to insert the data into the window
     int rm;
 
     if(empty){
@@ -273,8 +269,6 @@ void readHeadderType(){
     header_settings.final = getbits(1); // ((bitbuf>>bitpos) & 0b1);
     switch (getbits(2)){ //(bitbuf>>bitpos)&0b11
     case 3:
-        printf("%02X \n", bitbuf);
-        //vHEXdump(reinterpret_cast<uint8_t*>(bitbuf), 64/8);
         header_settings.reserved = 1;
         throw std::runtime_error("Code 11 isnt allowed");
         break;
@@ -311,7 +305,6 @@ void initializeFixedMap(){
 }
 
 void readBlockFormat(){
-    printf("%016llx\n", (unsigned long long)bitbuf);
 
     int hlit = getbits(5); //(bitbuf>>bitpos) & 0x1F;
     //bitpos+=5;
@@ -322,17 +315,7 @@ void readBlockFormat(){
     header_settings.HLIT = hlit+257; 
     header_settings.HDIST = hdist+1;    
     header_settings.HCLEN  = hclen+4;
-    //maybe combine it into a oneliner like getbit(5)+257
-    //add check so hlit hdist hclen are inside the limits
-    
-    std::cout<<"\nHLIT: "<<header_settings.HLIT;
-    std::cout<<"\nHDIST: "<<header_settings.HDIST;
-    std::cout<<"\nHCLEN: "<<header_settings.HCLEN;
 
-    //HEXdump(bitbuf);
-
-    //HCLEN
-    //tmp array subject to changes
 
     std::unordered_map<int, int> mp; //code arr_index
 
@@ -345,15 +328,6 @@ void readBlockFormat(){
         code_len[i].symbol = CCL_order[i];
     }
     
-
-    
-    std::cout<<"\nPresort HCLEN lengths";
-    for(auto &x : code_len){
-        std::cout<<"\nSymbol: "<<x.symbol<<" Len: "<<x.len;
-    }
-    std::cout<<"\n";
-
-
     //sorting
     merge::sort(code_len,[](canonical_struct &a, canonical_struct &b){
         if(a.len == b.len) return a.symbol < b.symbol;
@@ -361,21 +335,8 @@ void readBlockFormat(){
     });
 
 
-    std::cout<<"\nAfter sort HCLEN lengths";
-    for(auto &x : code_len){
-        std::cout<<"\nSymbol: "<<x.symbol<<" Len: "<<x.len;
-    }
-    std::cout<<"\n";
-
-    //Theb bug is either in canonical huffman or in constructLenArray
-
-
     canonicalHuffman(code_len, mp);
 
-    std::cout<<"\nCanonical Result and Map data for HCLEN";
-    for(auto &kv : mp){
-        std::cout<<"\n Key: "<<kv.first<<" Value: "<<kv.second;
-    }
         
 
     //this should be all for HCLEN
@@ -384,11 +345,6 @@ void readBlockFormat(){
 
     std::vector<int> len_vec = constructLenArray(mp);//len for both HDIST and HLIT
 
-
-    std::cout<<"\nHCLEN lengths";
-    for(auto &obj : len_vec){
-        std::cout<<" "<<obj;
-    }
 
     std::vector<canonical_struct> literal_len(header_settings.HLIT);
     std::vector<canonical_struct> distance_len(header_settings.HDIST);
@@ -403,17 +359,7 @@ void readBlockFormat(){
         return a.len < b.len;
     });
 
-    int check = 0;
-    std::cout<<"\n";
-    for(auto &x : literal_len){
-        if(x.len!=0) check++;
-        std::cout<<" "<<x.len;
-    }
-
     canonicalHuffman(literal_len, mp_literals);
-
-    if(check != mp_literals.size()) throw std::runtime_error("Map threw and element");
-
 
     //HDIST
     
@@ -435,16 +381,6 @@ void readBlockFormat(){
         });
         canonicalHuffman(distance_len, mp_distance);
     }
-
-    std::cout<<"\n###Literal lengths###";
-    for(auto &obj : literal_len){
-        std::cout<<"\n Length: "<<obj.len<<" Symbol "<<obj.symbol;
-    }
-    std::cout<<"\n###Distance lenghts###";
-    for(auto &obj : distance_len){
-        std::cout<<"\n Length: "<<obj.len<<" Symbol "<<obj.symbol;
-    }
-
 
 }
 
@@ -559,7 +495,6 @@ int parseDist(){
     return dist+extra_dist;
 }
 
-
 void findMatch(int len, int dist){
     if(dist > WINDOW_SIZE || dist > window_indx) throw std::runtime_error("Dist is bigger than 36KB or windwos is filled");
 
@@ -609,11 +544,3 @@ void cleanup(){
     mp_distance.clear();
 }
 
-void vHEXdump(const uint8_t *arr, int len){
-    //uint8_t *pAar = (uint8_t*)arr;
-
-    for(int i=0; i<len; i++){
-        printf("%02X ", arr[i]);
-    }
-
-}
