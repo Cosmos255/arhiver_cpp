@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
-#include "utils.hpp"
-#include "lz77.hpp"
+#include "../include/utils.hpp"
+#include "../include/lz77.hpp"
 
 constexpr int SEARCH_SIZE = 32*1000;
 constexpr int LOOkUP_SIZE = 258;

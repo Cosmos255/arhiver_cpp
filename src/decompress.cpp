@@ -1,4 +1,4 @@
-#include "utils.hpp"
+#include "../include/utils.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstdio>
@@ -9,7 +9,7 @@
 #include <exception>
 #include <algorithm>
 
-std::fstream in("download.dat", std::ios::in | std::ios::binary);
+std::fstream in("out.bin", std::ios::in | std::ios::binary);
 std::ofstream out("echo.bin", std::ios::out | std::ios::trunc | std::ios::binary);
 
 constexpr int INBUFFER_SIZE = 16000; //16KB
@@ -22,6 +22,8 @@ struct canonical_struct{
     int symbol = 0; //the index in the array 
 };
 
+
+
 struct Header{
     bool final = 0;
     bool compressed = 0;
@@ -33,6 +35,8 @@ struct Header{
     int HCLEN=0;
 
 }header_settings;
+
+
 void vHEXdump(const uint8_t *arr, int len);
 void HEXdump(uint32_t arr);
 void readHeadderType();
@@ -137,7 +141,7 @@ int main(){
     
         while(true){
             int symbol = parseLiteral();
-            assert(symbol >= 0);
+            if(symbol < 0) throw std::runtime_error("Unexpected error: Symbol is negative");
 
             if(symbol == 256){
                 outBuffWrite(0, 1);
@@ -185,7 +189,9 @@ int main(){
         window.clear();
         outbuffer.clear();
         inbuffer.clear();
-        throw std::runtime_error(e.what());
+        //throw std::runtime_error(e.what());
+        std::cerr<<e.what()<<"\n";
+        return 1; //error
     }
 
     std::cout<<"\nYes finnaly";
@@ -194,18 +200,20 @@ int main(){
 }
 
 void fillInbuff(){
-    assert(pBitpos <= pBitpos_end);
+    if(pBitpos > pBitpos_end) throw std::runtime_error("Error: Inbuffer pointer past buffer end");
 
     //maybe do a windows like in lz77a
     auto len = pBitpos_end-pBitpos;//how many symbols are still valid
 
-    assert (len >=0);
+    if(len < 0) throw std::runtime_error("Error: len is negative when filling the buffer");
+
     //if(len) memmove(inbuffer.data(), pBitpos, len); //replace with roateate maybe
     if(len) std::rotate(inbuffer.begin(), inbuffer.begin() + std::distance(inbuffer.data(), pBitpos), inbuffer.end());//should rotate
 
     in.read(reinterpret_cast<char *>(inbuffer.data()+len), INBUFFER_SIZE-len);
 
-    assert(in.gcount() <= INBUFFER_SIZE-len);
+    if(in.gcount() > INBUFFER_SIZE-len) throw std::runtime_error("Error: in.gcount is bigger than expected");
+
 
 
     //if(in.gcount() != INBUFFER_SIZE-len) pBitpos_end = inbuffer.data()+len+in.gcount(); 
@@ -226,23 +234,23 @@ void consumebits(const bool empty){
         rm=64;
     }else{
         rm = bitpos - (bitpos%8); //bits to remove
-        assert(rm > 0);
+        if(rm <=0) throw std::runtime_error("Error: consumebits remove is 0 or lower");
         
         if(rm == 64) bitbuf = 0;
         else bitbuf>>=rm;
 
-        assert(bitpos >= rm);
+        if(bitpos < rm) throw std::runtime_error("Error: remove is bigger than bitpos");
 
         bitpos-=rm;
     }
 
-    assert(pBitpos <= pBitpos_end);
+    if(pBitpos > pBitpos_end) throw std::runtime_error("Error: Buffer pointer past buffer end");
 
     if(rm/8 > pBitpos_end-pBitpos) fillInbuff();
 
 
     while(rm > 0 && pBitpos != pBitpos_end){
-        assert(rm>=8 && rm <= 64);
+        if(rm < 8 || rm > 64) throw std::runtime_error("Error: remove is desynced");
         bitbuf|=(uint64_t)(*pBitpos) << (64-rm);
         rm-=8;
         pBitpos++;
@@ -252,7 +260,7 @@ void consumebits(const bool empty){
 
 uint32_t getbits(int len){
     if(len == 0) return 0;
-    assert(len > 0 && len <= 15); //max bits 15
+    if(len < 0 || len > 15) throw std::runtime_error("Error: getbits len is negative or bigger than 15");//max bits 15
     uint32_t mask = (1u << len)-1;
     if(bitpos + len >= 64) consumebits(); //not enough bits;
     bitpos+=len;
@@ -328,7 +336,7 @@ void readBlockFormat(){
 
     std::unordered_map<int, int> mp; //code arr_index
 
-    assert(header_settings.HCLEN >=4 && header_settings.HCLEN <=19); //maybe use a if and a custom output
+    if(header_settings.HCLEN < 4 || header_settings.HCLEN >19) throw std::runtime_error("HCLEN is invalid");
 
     std::vector<canonical_struct> code_len(header_settings.HCLEN);
 
@@ -487,7 +495,7 @@ std::vector<int> constructLenArray(std::unordered_map<int, int> &mp){
                 fill_symbol = mit->second;
                 fill_size = 1;
         }
-        assert(it+fill_size <= len_vec.end());
+        if(it+fill_size > len_vec.end()) throw std::runtime_error("Fill size for len codes is larger than HDIST+HLIT");
         std::fill(it, it+fill_size, fill_symbol);
         it+=fill_size;
     }
@@ -496,17 +504,16 @@ std::vector<int> constructLenArray(std::unordered_map<int, int> &mp){
 }
 
 void canonicalHuffman(std::vector<canonical_struct> &arr, std::unordered_map<int, int> &mp){
-    assert(arr.size());
+    if(!arr.size()) throw std::runtime_error("Error: Canonical Huffman arr is empty");
 
     int len=0;
     int code=0;
 
     for(auto &obj : arr){
         if(obj.len == 0) continue;
-        assert(obj.len <= 15);
+        if(obj.len > 15 || obj.len < 0) throw std::runtime_error("Error: Canonical Huffman len is bigger than 15 or negative");
         if(obj.len > len) code <<= (obj.len-len);
         len=obj.len;
-        assert(len > 0);
         mp.insert({(1<<len)| code , obj.symbol});
         code++;
     }
@@ -526,9 +533,9 @@ int parseCode(std::unordered_map<int, int> &mp){
 }
 
 int parseLiteral(bool parseLen, int symbol){
-    assert(symbol <= 285);
+    if(symbol > 285) throw std::runtime_error("Error: Literal symbol bigger than 285");
     if(parseLen){
-        assert(symbol>=257);
+        if(symbol < 257) throw std::runtime_error("Error: Length symbol lower than 257");
         
         int len = lengthTable[symbol-257].baselength;
         int extra_bits = lengthTable[symbol-257].extraBits;
@@ -542,7 +549,7 @@ int parseLiteral(bool parseLen, int symbol){
 
 int parseDist(){
     auto symbol = parseCode(mp_distance);
-    assert(symbol < 30);
+    if(symbol >= 30) throw std::runtime_error("Error: Distance index is bigger or equal to 30");
 
     int dist = distTable[symbol].basedist;
     int extra_bits = distTable[symbol].extraBits;
