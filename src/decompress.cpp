@@ -1,27 +1,14 @@
-#include "../include/utils.hpp"
+#include "../include/decompress.hpp"
 #include <iostream>
 #include <fstream>
 #include <cstdio>
 #include <string>
 #include <assert.h>
-#include <vector>
-#include <unordered_map>
 #include <exception>
 #include <algorithm>
 
-std::fstream in;
-std::ofstream out;
-
-constexpr int INBUFFER_SIZE = 16000; //16KB
-constexpr int OUTBUFFER_SIZE = 1<<20; //1MB
-constexpr int WINDOW_SIZE = 33000;
-
-
-struct canonical_struct{
-    int len = 0; //len/code
-    int symbol = 0; //the index in the array 
-};
-
+static std::fstream in;
+static std::ofstream out;
 
 
 struct Header{
@@ -37,72 +24,47 @@ struct Header{
 }header_settings;
 
 
-void vHEXdump(const uint8_t *arr, int len);
-void HEXdump(uint32_t arr);
-void readHeadderType();
-void initializeFixedMap();
-void readBlockFormat();
-void canonicalHuffman(std::vector<canonical_struct> &arr, std::unordered_map<int, int> &mp);
-std::vector<int> constructLenArray(std::unordered_map<int, int> &mp);
-int parseLiteral(bool parseLen=0, int symbol = 0);
-int parseDist();
-
-uint32_t getbits(int len=0);
-
-void findMatch(int len, int dist);
-void outBuffWrite(uint8_t ch = 0, bool f_out = 0);
-void cleanup();
-
-void consumebits(const bool empty=0);
-
-
-std::vector<uint8_t> window(WINDOW_SIZE);
-std::vector<uint8_t> inbuffer(INBUFFER_SIZE);
-std::vector<uint8_t> outbuffer(OUTBUFFER_SIZE);
+static std::vector<uint8_t> window(WINDOW_SIZE);
+static std::vector<uint8_t> inbuffer(INBUFFER_SIZE);
+static std::vector<uint8_t> outbuffer(OUTBUFFER_SIZE);
 
 
 uint64_t window_indx;
 uint64_t window_notav;
 
-int outbuff_indx = 0;
+static int outbuff_indx = 0;
 
 uint8_t *pBitpos = inbuffer.data();
 uint8_t *pBitpos_end = pBitpos + INBUFFER_SIZE;
 
-const int INPUT_SIZE = 10000;
 
-uint64_t bitbuf = 0;
-int bitpos=0;
+static uint64_t bitbuf = 0;
+static int bitpos=0;
 
-void test();
 
 std::unordered_map<int, int> mp_literals;
 std::unordered_map<int, int> mp_distance;
 
 //rename it do decompress and pass intput file name and output file name/locations
 
-bool main(int argc, char* argv[]){
-    try{
-    if(argc < 3) throw std::runtime_error("Not enough arguments");
-    
-    std::string in_filepath = argv[1];
-    std::string out_filepath = argv[2];
-    
-    if(in_filepath.empty() || out_filepath.empty()) throw std::runtime_error("Filepaths are empty");
+bool decompress(std::string input, std::string output){
 
-    in.open(in_filepath, std::ios::in | std::ios::binary);
-    out.open(out_filepath, std::ios::out | std::ios::trunc | std::ios::binary);
+    try{
+    initialize();
+
+    if(input.empty() || output.empty()) throw std::runtime_error("Filepaths are empty");
+
+    in.open(input, std::ios::in | std::ios::binary);
+    out.open(output, std::ios::out | std::ios::trunc | std::ios::binary);
 
     if(!in.is_open()) throw std::runtime_error("Couldnt open the input file");
     in.read(reinterpret_cast<char *>(inbuffer.data()), INBUFFER_SIZE); //idk windows size
 
+    pBitpos = inbuffer.data();
     pBitpos_end = inbuffer.data() + in.gcount();
 
     if(!out.is_open()) throw std::runtime_error("Couldnt open the output file");
 
-    std::fill(window.begin(), window.end(), 0);
-    window_indx = 0;
-    window_notav = WINDOW_SIZE;
 
     /*
     ##############################################
@@ -113,10 +75,7 @@ bool main(int argc, char* argv[]){
 
     ##############################################
     */
-
     consumebits(1);
-
-
 
     while(true){
         header_settings = {}; //initialize struct to defaults
@@ -124,10 +83,7 @@ bool main(int argc, char* argv[]){
         mp_literals.clear();
         mp_distance.clear();
 
-    
-
         readHeadderType();
-
 
         if(!header_settings.compressed){
             getbits(5); //padding bits;
@@ -144,10 +100,6 @@ bool main(int argc, char* argv[]){
         if(header_settings.dynamicHuffman) readBlockFormat();
         else initializeFixedMap();
 
-        std::cout<<"HLIT: "<<header_settings.HLIT;
-        std::cout<<"HDIST: "<<header_settings.HDIST;
-        std::cout<<"HCLEN: "<<header_settings.HCLEN;
-    
         while(true){
             int symbol = parseLiteral();
             if(symbol < 0) throw std::runtime_error("Unexpected error: Symbol is negative");
@@ -181,23 +133,16 @@ bool main(int argc, char* argv[]){
 
     cleanup();
 
-
-
     }
     catch(const std::exception& e){
         outBuffWrite(0, 1); //idk if i should dump when error
         out.close();
         in.close();
         cleanup();
-        window.clear();
-        outbuffer.clear();
-        inbuffer.clear();
-        std::cerr<<e.what()<<"\n";
+        std::cerr<<"Error: "<<e.what()<<"\n";
         return 1; //error
     }
-
-    std::cout<<"\nYes finnaly";
-
+    std::cout<<"\nFinished";
     return 0;
 }
 
@@ -282,6 +227,7 @@ void readHeadderType(){
         break;
     default:
         header_settings.compressed = 0;
+        throw std::runtime_error("Unexpected error while reading the header");
         break;
     }
 
@@ -544,3 +490,15 @@ void cleanup(){
     mp_distance.clear();
 }
 
+void initialize(){
+    std::fill(window.begin(), window.end(), 0);
+    std::fill(inbuffer.begin(), inbuffer.end(), 0);
+    std::fill(outbuffer.begin(), outbuffer.end(), 0);
+
+    window_indx = 0;
+    window_notav = 0;
+    outbuff_indx = 0;
+
+    bitbuf = 0;
+    bitpos = 0;
+}

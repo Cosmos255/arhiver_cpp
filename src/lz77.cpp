@@ -19,7 +19,7 @@ struct LZ77{
     std::ifstream in;
 
     std::string ws;
-    uint64_t read;
+    //uint64_t read;
 
     uint64_t srch = 0;
     uint64_t look = 1;
@@ -37,6 +37,7 @@ void fill_window(uint64_t &read, LZ77 &lz);
 
 std::vector<token> lz77_token(std::string file_name){
     LZ77 lz77;
+    tokens.clear();
 
     lz77.in.open(file_name , std::ios::binary |  std::ios::ate);
 
@@ -66,18 +67,7 @@ std::vector<token> lz77_token(std::string file_name){
         find_match(lz77);
         move_window(lz77);
     }
-    /*
-    for(token t : tokens){
-        std::cout<<"TOKEN:\n";
-        if(t.type == match){
-            std::cout<<"match\n";
-            std::cout<<t.dist<<"\t"<<t.len<<"\n";
-        }else{
-            std::cout<<static_cast<char>(t.data)<<"\n";
-            std::cout<<"lvalue\n";
-        }
-    }
-    */
+
     lz77.in.close();
     return tokens;
 

@@ -4,7 +4,7 @@
 #include <utility>
 #include <iostream>
 
-
+enum c_type {DYNAMIC, STATIC, STORED};
 
 struct bits{
     int value = 0;
@@ -146,36 +146,4 @@ int lcode(int x);
 
 int dcode(int x);
 
-
-
-
 const int CCL_order[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-
-
-/*
-HEADER
-
-BFINAL(1bit) 1 if last 0 otherwise
-BTYPE(2bits)
-    00 uncompresed
-    01 compressed with fixed Huff
-    10 comrpessed with dynamic huff
-    11 reserved/error
-
-
-000
-
-literal bytes 0-255
-256 end of block
-257-285 lengthcode
-
-*/
-
-
-//for deflate like there are only 2 tree literals lengths and distnace 
-
-//256 end of block
-
-//bruh huffman codes are MSB and the rest is LSB
-
-//last element in the tree needs to be checked lexicogrphicly so A gets 0 B 1
