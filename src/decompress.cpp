@@ -45,12 +45,10 @@ static int bitpos=0;
 std::unordered_map<int, int> mp_literals;
 std::unordered_map<int, int> mp_distance;
 
-//rename it do decompress and pass intput file name and output file name/locations
-
-bool decompress(std::string input, std::string output){
+bool inflate(std::string input, std::string output){
 
     try{
-    initialize();
+    inflateInit();
 
     if(input.empty() || output.empty()) throw std::runtime_error("Filepaths are empty");
 
@@ -142,7 +140,7 @@ bool decompress(std::string input, std::string output){
         std::cerr<<"Error: "<<e.what()<<"\n";
         return 1; //error
     }
-    std::cout<<"\nFinished";
+    std::cout<<"Finished\n";
     return 0;
 }
 
@@ -211,8 +209,8 @@ uint32_t getbits(int len){
 
 
 void readHeadderType(){
-    header_settings.final = getbits(1); // ((bitbuf>>bitpos) & 0b1);
-    switch (getbits(2)){ //(bitbuf>>bitpos)&0b11
+    header_settings.final = getbits(1); 
+    switch (getbits(2)){ 
     case 3:
         header_settings.reserved = 1;
         throw std::runtime_error("Code 11 isnt allowed");
@@ -252,12 +250,10 @@ void initializeFixedMap(){
 
 void readBlockFormat(){
 
-    int hlit = getbits(5); //(bitbuf>>bitpos) & 0x1F;
-    //bitpos+=5;
-    int hdist = getbits(5); //(bitbuf>>bitpos) & 0x1F;
-    //bitpos+=5;
-    int hclen = getbits(4); //(bitbuf>>bitpos) & 0xF;
-    //bitpos+=4;
+    int hlit = getbits(5);
+    int hdist = getbits(5);
+    int hclen = getbits(4);
+
     header_settings.HLIT = hlit+257; 
     header_settings.HDIST = hdist+1;    
     header_settings.HCLEN  = hclen+4;
@@ -283,12 +279,7 @@ void readBlockFormat(){
 
     canonicalHuffman(code_len, mp);
 
-        
-
-    //this should be all for HCLEN
-    //use the HCLEN to do the HLIT and HDIST
     //HLIT
-
     std::vector<int> len_vec = constructLenArray(mp);//len for both HDIST and HLIT
 
 
@@ -318,8 +309,6 @@ void readBlockFormat(){
     if(distance_len.size() == 1 && distance_len[0].len == 0){
         header_settings.ALL_LITERALS = true;
     }else{
-
-
 
         merge::sort(distance_len, [](canonical_struct &a, canonical_struct &b){
             if(a.len == b.len) return a.symbol < b.symbol;
@@ -490,7 +479,7 @@ void cleanup(){
     mp_distance.clear();
 }
 
-void initialize(){
+void inflateInit(){
     std::fill(window.begin(), window.end(), 0);
     std::fill(inbuffer.begin(), inbuffer.end(), 0);
     std::fill(outbuffer.begin(), outbuffer.end(), 0);

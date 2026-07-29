@@ -40,4 +40,4 @@ void outputDictionary();
 void writeBits(uint64_t code, int len);
 void writeStored();
 void HeaderInit(bool lastblock, c_type mode);
-static void initialize();
+static void deflateInit();

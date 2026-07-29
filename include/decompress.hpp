@@ -28,4 +28,4 @@ void findMatch(int len, int dist);
 void outBuffWrite(uint8_t ch = 0, bool f_out = 0);
 void cleanup();
 void consumebits(const bool empty=0);
-static void initialize();
+static void inflateInit();

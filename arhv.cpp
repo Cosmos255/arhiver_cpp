@@ -4,13 +4,13 @@
 #include <vector>
 #include <string>
 
-//using namespace std;
 using namespace std::filesystem;
 
 bool outflag = 0;
 path outpath = "";
 bool cmpr = 0;
 bool extr = 0;
+int memLevel = 8;
 c_type mode = DYNAMIC;
 
 void programInit(path file_path, path out_path);
@@ -33,8 +33,8 @@ int main(int argc, char *argv[]){
             std::cout << "\nMethod:\n '--mode=static  : faster compression with lower signature header but less efficient compared to dynamic";
             std::cout <<"\n '--mode=dynamic'  : uses dynamic created codes based on the data it creates the highest compression ratio";
             std::cout <<"\n '--mode=stored'  : used to specify a stored block";
-            std::cout <<"\nThe default mode is dynamic\n\n";
-
+            std::cout <<"\nThe default mode is dynamic";
+            std::cout <<"\n--memLevel=(1-9) : Higher number means better compression ratio default is 8\n\n";
             return 0;
         }
         else if(arg == "-x") {
@@ -49,6 +49,18 @@ int main(int argc, char *argv[]){
         else if(arg == "--mode=static") mode = STATIC;
         else if(arg == "--mode=dynamic") mode = DYNAMIC;
         else if(arg == "--mode=stored") mode = STORED;
+        else if(arg.size() > 11 && arg.substr(0,11) == "--memLevel="){
+            try{
+                int num = std::stoi(arg.substr(11, 1));
+                if(num <= 0) throw std::invalid_argument("Invalid number");
+                memLevel = num;
+                
+            }catch(const std::invalid_argument& e){
+                std::cerr<<"\nError memLevel: "<<e.what();
+                throw std::runtime_error("Err");
+            }
+
+        }
         else {
             if(outflag) {
                 outpath = argv[i];
@@ -90,8 +102,8 @@ int main(int argc, char *argv[]){
 void programInit(const path file_path, path out_path){
     out_path /= file_path.stem();
     out_path += ".bin";
-    if(extr) decompress(file_path.string(), out_path.string());
-    else compress(file_path.string(), out_path.string(), mode);
+    if(extr) inflate(file_path.string(), out_path.string());
+    else deflate(file_path.string(), out_path.string(), mode, memLevel);
 }
 
 

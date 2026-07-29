@@ -12,18 +12,6 @@
 #include <exception>
 #include <cmath>
 
-
-/*
-NOTE: using a smaller buffer might reduce how much memory is allocated 
-as we can switch to uint32t instead of 64
-
-STORED BLOCK SIZE LIMIT IS 65,535 bytes
-
-IMPLEMETN memLevel
-
-create a dev branch for implementation for blocks and rewrting some parts of compressor so its a bit nicer when it comes to differnet run modes
-
-*/
 //freq Len code
 struct compressor_cfg{
     std::string input;
@@ -38,7 +26,6 @@ FLC literal[maxCodeValue] = {};
 FLC dist[maxDistValue] = {};
 FLC CCL[19] = {};
 
-//bruh they need initialization 0_0
 
 int HLIT;
 int HDIST;
@@ -56,160 +43,169 @@ int outbuff_indx = 0;
 static uint64_t buffer = 0;
 static int bitpos = 0; //max is 64
 
-bool compress(std::string input, std::string output, uint8_t mode){
+bool deflate(std::string input, std::string output, uint8_t mode, int memLevel){
     try{
-        initialize();
+        deflateInit();
+        std::fill(outbuffer.begin(), outbuffer.end(), 0);
+
+        outbuff_indx = 0;
+        buffer = 0;
+        bitpos = 0;
+
+        out.close();
+        out.clear();
+        cfg = {};
 
         std::cout<<"\n"<<input<<"\n"<<output<<"\n";
 
         if(input.empty() || output.empty() || mode > 2) throw std::runtime_error("Input or output file not provided");
 
-        cfg.input = input;
-        cfg.output = output;
-        cfg.type = static_cast<c_type>(mode);
+
+        cfg = {input, output, static_cast<c_type>(mode)};
 
         out.open(output, std::ios::out | std::ios::trunc | std::ios::binary);
 
-        //tree.reserve(600); //should add smth to improve performance
-
-        //add a pair return last block and the tokens 
-        auto lzed = lz77_token(cfg.input);//tokens from lz77 algo
- 
         if(cfg.type == STORED){ writeStored(); return 0;}
+
+        bool lz_finish = false;
+
+        while(!lz_finish){
+            deflateInit();
+       
+            auto lz_response = lz77_token(cfg.input, memLevel);
+            auto lzed = lz_response.second;
+            lz_finish = lz_response.first;
         
-        HeaderInit(true, cfg.type);
+            HeaderInit(lz_finish, cfg.type);
 
-        if(cfg.type == DYNAMIC){
+            if(cfg.type == DYNAMIC){
 
-        bool distance = false;
-        for(token &tk : lzed){
-            if(tk.type == match){
-                if(lcode(tk.len) < 0) throw std::runtime_error("Lcode is negative");
-                if(dcode(tk.dist) < 0) throw std::runtime_error("Dcode is negative");
+            bool distance = false;
+            for(token &tk : lzed){
+                if(tk.type == match){
+                    if(lcode(tk.len) < 0) throw std::runtime_error("Lcode is negative");
+                    if(dcode(tk.dist) < 0) throw std::runtime_error("Dcode is negative");
 
-                literal[257 + lcode(tk.len)].freq++;
-                dist[dcode(tk.dist)].freq++;
-                distance = true;
+                    literal[257 + lcode(tk.len)].freq++;
+                    dist[dcode(tk.dist)].freq++;
+                    distance = true;
+                }
+                else literal[(uint8_t)(tk.data)].freq++;
+
             }
-            else literal[(uint8_t)(tk.data)].freq++;
+            literal[256].freq++;//end of block
 
-        }
+            //literal length codes
+            for(int i=0; i<maxCodeValue; i++)
+            if(literal[i].freq){
+                bn_heap::insert({i, literal[i].freq});
+            }
 
-
-        literal[256].freq++;//end of block
-
-        //literal length codes
-        
-        for(int i=0; i<maxCodeValue; i++)
-        if(literal[i].freq){
-            bn_heap::insert({i, literal[i].freq});
-        }
-
-        buildTree(); //treebuilder from bn heap
-        createCodes(literal); //creates the huffman codes
-        tree.clear();
-        bn_heap::clear();
-
-        if(distance){
-
-        //dist codes
-            for(int i=0; i<maxDistValue; i++)
-            if(dist[i].freq){
-                bn_heap::insert({i, dist[i].freq});
-            } 
-
-            buildTree();
-            createCodes(dist);
+            buildTree(); //treebuilder from bn heap
+            createCodes(literal); //creates the huffman codes
             tree.clear();
             bn_heap::clear();
-        
-        }else dist[0].len = 0;
-        
-        HLIT = maxCodeValue;
-        HDIST = maxDistValue;
 
-        while(HLIT >= 256 && literal[HLIT-1].len == 0) HLIT--;
-        if(HLIT < 257) throw std::runtime_error("HLIT lower than 256");
+            if(distance){
 
-        if(!distance) HDIST = 1;
-        else while(HDIST > 0 && dist[HDIST-1].len == 0) HDIST--;
+            //dist codes
+                for(int i=0; i<maxDistValue; i++)
+                if(dist[i].freq){
+                    bn_heap::insert({i, dist[i].freq});
+                } 
 
-        processDictionaryRun();//coounts freq for repeatcodes and creates a vector for output
-
-        for(int i=0; i<19; i++)
-            if(CCL[i].freq){
-                bn_heap::insert({i, CCL[i].freq});
-        }
-        
-        buildTree(); //tree for CCL
-        createCodes(CCL); //codes for CCL
-        tree.clear();
-        bn_heap::clear();
-
-
-        //Creating the header and blocks and outputtign the data
-
-        HCLEN = 19;
-
-        while(HCLEN >= 4 && CCL[CCL_order[HCLEN-1]].len == 0) HCLEN--;
-        if(HCLEN < 4) throw std::runtime_error("HCLEN lower than 4");
-
-        HLIT-=257;
-        HDIST-=1;
-        HCLEN-=4;
-
-        if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
-
-        //HLIT 5bits
-        writeBits(HLIT, 5);
-
-        //HDIST 5 bits
-        writeBits(HDIST, 5);
-
-        //HCLEN 4 bits
-        writeBits(HCLEN, 4);
-
-        //CCL output
-        for(int i=0; i<(HCLEN+4); i++){
-            int key = CCL_order[i];
-            if(CCL[key].len > 7) throw std::runtime_error("CCL key too long");
-            writeBits((CCL[key].len & 0b111), 3);
-        }
-
-        outputDictionary(); //outputs the dictionary
-
-
-        }    
-        else if(cfg.type == STATIC){
-            int e=0;
+                buildTree();
+                createCodes(dist);
+                tree.clear();
+                bn_heap::clear();
             
-            //MAP INITIALIZATION
-            for(int i= 48; i<=191; e++, i++){literal[e].code = i; literal[e].len = 8;}
-            for(int i= 400; i<=511; e++, i++){literal[e].code = i; literal[e].len = 9;}
-            for(int i=0; i<=23; e++, i++){literal[e].code = i; literal[e].len = 7;}
-            for(int i=192; i<=197; e++, i++){literal[e].code = i; literal[e].len = 8;} //reduce by 2 cuz 286 287 never ocurs
-            if(e > maxCodeValue) throw std::runtime_error("index e past literal vector");
+            }else dist[0].len = 0;
+            
+            HLIT = maxCodeValue;
+            HDIST = maxDistValue;
 
-            for(int i=0; i<maxDistValue; i++){dist[i].code = i; dist[i].len = 5;} //distance
+            while(HLIT >= 256 && literal[HLIT-1].len == 0) HLIT--;
+            if(HLIT < 257) throw std::runtime_error("HLIT lower than 256");
 
-        }
+            if(!distance) HDIST = 1;
+            else while(HDIST > 0 && dist[HDIST-1].len == 0) HDIST--;
+
+            processDictionaryRun();//coounts freq for repeatcodes and creates a vector for output
+
+            for(int i=0; i<19; i++)
+                if(CCL[i].freq){
+                    bn_heap::insert({i, CCL[i].freq});
+            }
+            
+            buildTree(); //tree for CCL
+            createCodes(CCL); //codes for CCL
+            tree.clear();
+            bn_heap::clear();
+
+
+            //Creating the header and blocks and outputtign the data
+
+            HCLEN = 19;
+
+            while(HCLEN >= 4 && CCL[CCL_order[HCLEN-1]].len == 0) HCLEN--;
+            if(HCLEN < 4) throw std::runtime_error("HCLEN lower than 4");
+
+            HLIT-=257;
+            HDIST-=1;
+            HCLEN-=4;
+
+            if(HLIT < 0 || HDIST < 0 || HCLEN < 0) throw std::runtime_error("Unexpected negative values");
+
+            //HLIT 5bits
+            writeBits(HLIT, 5);
+
+            //HDIST 5 bits
+            writeBits(HDIST, 5);
+
+            //HCLEN 4 bits
+            writeBits(HCLEN, 4);
+
+            //CCL output
+            for(int i=0; i<(HCLEN+4); i++){
+                int key = CCL_order[i];
+                if(CCL[key].len > 7) throw std::runtime_error("CCL key too long");
+                writeBits((CCL[key].len & 0b111), 3);
+            }
+
+            outputDictionary(); //outputs the dictionary
+
+
+            }    
+            else if(cfg.type == STATIC){
+                int e=0;
+                
+                //MAP INITIALIZATION
+                for(int i= 48; i<=191; e++, i++){literal[e].code = i; literal[e].len = 8;}
+                for(int i= 400; i<=511; e++, i++){literal[e].code = i; literal[e].len = 9;}
+                for(int i=0; i<=23; e++, i++){literal[e].code = i; literal[e].len = 7;}
+                for(int i=192; i<=197; e++, i++){literal[e].code = i; literal[e].len = 8;} //reduce by 2 cuz 286 287 never ocurs
+                if(e > maxCodeValue) throw std::runtime_error("index e past literal vector");
+
+                for(int i=0; i<maxDistValue; i++){dist[i].code = i; dist[i].len = 5;} //distance
+
+            }
 
         //Outputting the comprressed data
-        for(token &t : lzed){
-            if(t.type == match){
-                writeBitcode(literal[257 + lcode(t.len)].code, literal[257 + lcode(t.len)].len); //wait what about dcode and lcode ?? 
-                writeExtra(t.len, true);
-                writeBitcode(dist[dcode(t.dist)].code, dist[dcode(t.dist)].len);
-                writeExtra(t.dist, false);
+            for(token &t : lzed){
+                if(t.type == match){
+                    writeBitcode(literal[257 + lcode(t.len)].code, literal[257 + lcode(t.len)].len);
+                    writeExtra(t.len, true);
+                    writeBitcode(dist[dcode(t.dist)].code, dist[dcode(t.dist)].len);
+                    writeExtra(t.dist, false);
+                }
+                else{
+                    writeBitcode(literal[t.data].code, literal[t.data].len);
+                }
             }
-            else{
-                writeBitcode(literal[t.data].code, literal[t.data].len);
-            }
-        }
 
-        //after implementing memLevle in lz77 remove this as lz77 will write the enf of blokc code 256
-        writeBitcode(literal[256].code, literal[256].len); //this should be it i think
-        flush(1);
+            writeBitcode(literal[256].code, literal[256].len); //this should be it i think
+        }
+        flush(1); //only use at the end as it adds padding for byte allignment
 
         out.close();
 
@@ -217,26 +213,17 @@ bool compress(std::string input, std::string output, uint8_t mode){
         std::cerr<<"Error: "<<e.what()<<"\n";
         return 1; //error
     }
-   // std::cout<<"Finished";
+    std::cout<<"Finished\n";
     return 0;
 }
 
-void initialize(){
+void deflateInit(){
     tree.clear();
     dictionary.clear();
-    std::fill(outbuffer.begin(), outbuffer.end(), 0);
-    cfg = {};
 
     HLIT = 0;
     HCLEN = 0;
     HDIST = 0;
-
-    out.close();
-    out.clear();
-    
-    outbuff_indx = 0;
-    buffer = 0;
-    bitpos = 0;
 
     std::fill(std::begin(literal), std::end(literal), FLC{});
     std::fill(std::begin(dist), std::end(dist), FLC{});
@@ -256,7 +243,7 @@ void HeaderInit(bool lastblock, c_type mode){
         break;
     case STORED:
         writeBits(0b00, 2);
-        writeBits(0, 5); //padding is broken it doesnt take in account the current bitpos :/ which doesnt matter -_-
+        writeBits(0, 5);
         break;    
     default:
         throw std::runtime_error("No mode specified for Header Initialization");
@@ -283,34 +270,15 @@ void writeStored(){
 
         HeaderInit(lastblock, STORED);
 
-
-        if(len+outbuff_indx+5 >= outbuffer.size()){
-            out.write(reinterpret_cast<char*>(outbuffer.data()), outbuff_indx);
-            outbuff_indx=0;
-        }
-
-        //replace with writeBits :/
-
-        /*
-
         writeBits(static_cast<uint8_t>(len), 8);
         writeBits(len>>8, 8);
         writeBits(static_cast<uint8_t>(nlen), 8);
         writeBits(nlen>>8, 8);
-        
-        */
-
-
-        outbuffer[outbuff_indx++] = static_cast<uint8_t>(len);
-        outbuffer[outbuff_indx++] = (len>>8);
-        outbuffer[outbuff_indx++] = static_cast<uint8_t>(nlen);
-        outbuffer[outbuff_indx++] = (nlen>>8);
+        flush();
 
         in.read(reinterpret_cast<char*>(outbuffer.data()+outbuff_indx), len);
         outbuff_indx+=len;
     }
-    //why not flush ?
-    //so if i use writeBits i should eb able to easily use flush() but then i cant use read so the best would be to use writeBits for the header and len nlen flush forced
     out.write(reinterpret_cast<char*>(outbuffer.data()), outbuff_indx);
 
     in.close();

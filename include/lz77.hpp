@@ -6,6 +6,7 @@
 
 enum type_e {lvalue, match};
 
+
 struct token{
     type_e type = lvalue;
     unsigned char data;
@@ -18,7 +19,7 @@ struct token{
     
 };
 
-std::vector<token> lz77_token(std::string file_name);
+std::pair<bool, std::vector<token>> lz77_token(std::string file_name, int memLevel = 8);
 
 
 

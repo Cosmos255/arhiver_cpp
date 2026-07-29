@@ -3,5 +3,5 @@
 #include <string>
 #include <stdint.h>
 
-bool decompress(std::string input, std::string output);
-bool compress(std::string input, std::string output, uint8_t mode = 0);
+bool inflate(std::string input, std::string output);
+bool deflate(std::string input, std::string output, uint8_t mode = 0, int memLevel = 8);

@@ -3,78 +3,100 @@
 #include "../include/utils.hpp"
 #include "../include/lz77.hpp"
 
-constexpr int SEARCH_SIZE = 32*1000;
-constexpr int LOOkUP_SIZE = 258;
-constexpr int read_size = SEARCH_SIZE+LOOkUP_SIZE;
-constexpr int min_match = 3;
-constexpr int min_lookup = 10;
-
-//need to add max limit to lenght is 258
- 
 
 std::vector<token> tokens;
+static bool lz_finish = true;
 
-struct LZ77{
+static struct LZ77_config{
+    const int SEARCH_SIZE = 32*1000;
+    const int window_size = 32*1000 + 258;
+    const int min_match = 3;
+    const int min_lookup = 10;
+    int vec_size;
+}cfg;
+
+
+
+static struct LZ77{
 
     std::ifstream in;
 
     std::string ws;
-    //uint64_t read;
 
-    uint64_t srch = 0;
-    uint64_t look = 1;
-    uint64_t notav = 0;
+    uint64_t srch = 0; //limits
+    uint64_t look = 1; 
+    uint64_t notav = 0; //limits
 
 
     std::pair<int, int> match; //distance length
     //put 0 0
 
-};
-
-void find_match(LZ77 &lz);
-void move_window(LZ77 &lz);
-void fill_window(uint64_t &read, LZ77 &lz);
-
-std::vector<token> lz77_token(std::string file_name){
-    LZ77 lz77;
-    tokens.clear();
-
-    lz77.in.open(file_name , std::ios::binary |  std::ios::ate);
+}lz77;
 
 
-    if(!lz77.in.is_open()){
-        throw std::runtime_error("Couldnt open the file");
+
+void find_match(LZ77 &lz, const LZ77_config &cfg);
+void move_window(LZ77 &lz, const LZ77_config &cfg);
+void fill_window(uint64_t &read, LZ77 &lz, const LZ77_config &cfg);
+
+std::pair<bool, std::vector<token>> lz77_token(std::string file_name, int memLevel){
+    uint64_t read;
+    if(lz_finish){
+        lz77 = {};
+        cfg.vec_size = 0;
+
+        cfg.vec_size = (1 << (memLevel + 6)) - 1;
+
+        tokens.clear();
+        tokens.reserve(cfg.vec_size);
+
+        lz77.in.open(file_name , std::ios::binary |  std::ios::ate);
+
+
+        if(!lz77.in.is_open()) throw std::runtime_error("Couldnt open the file");
+        if(lz77.in.tellg() < 1) throw std::runtime_error("File size too small to tokenize");
+        
+        lz77.in.seekg(0);
+        lz77.ws.resize(cfg.window_size, '\0');
+        lz77.in.read(&lz77.ws[0], cfg.window_size);
+
+        read = lz77.in.gcount();
+        lz77.notav = read;
+        tokens.emplace_back(lz77.ws.at(lz77.srch)); //initialized the first letter
+    }else{
+        tokens.clear();
+        read = lz77.in.gcount();
+        tokens.emplace_back(lz77.ws.at(lz77.srch)); //first element to initialize
     }
-
-    uint64_t size = lz77.in.tellg();
-    if(size < 1)
-        throw std::runtime_error("File size too small to tokenize");
-    lz77.in.seekg(0);
-
-    lz77.ws.resize((SEARCH_SIZE+LOOkUP_SIZE), '\0');
-
-    lz77.in.read(&lz77.ws[0], read_size);
-
-    uint64_t read = lz77.in.gcount();
-    lz77.notav = read;
-    tokens.emplace_back(lz77.ws.at(lz77.srch)); //initialized the first letter
-
 
     while(lz77.look < lz77.notav){
-        if(lz77.look < min_lookup+lz77.notav && !lz77.in.eof()){ 
-            fill_window(read,lz77);
+        if(lz77.look < cfg.min_lookup+lz77.notav && !lz77.in.eof()){ 
+            fill_window(read,lz77,cfg);
         }
-        find_match(lz77);
-        move_window(lz77);
+        if(tokens.size() >= cfg.vec_size){
+
+            lz77.notav-=lz77.srch;
+            lz77.look-=lz77.srch;
+            lz77.srch= lz77.look;
+
+            lz77.look++;
+
+            lz_finish = false;
+            return {lz_finish, tokens}; //lz finish should be false here
+        }
+
+        find_match(lz77,cfg);
+        move_window(lz77,cfg);
     }
+    lz_finish = true;
 
     lz77.in.close();
-    return tokens;
+    return {lz_finish, tokens};
 
 }
 
 
-void find_match(LZ77 &lz){
+void find_match(LZ77 &lz, const LZ77_config &cfg){
     lz.match.first = 0;
     lz.match.second = 0;
     uint64_t distance = 1;
@@ -83,8 +105,8 @@ void find_match(LZ77 &lz){
 
         int length = 0;
 
-        while(lz.look+length < lz.notav){ // need to modify the code so we remove
-            if(lz.ws.at((lz.look+length)%read_size) == lz.ws.at((lz.look-distance+length)%read_size)) length++;
+        while(lz.look+length < lz.notav){
+            if(lz.ws.at((lz.look+length)%cfg.window_size) == lz.ws.at((lz.look-distance+length)%cfg.window_size)) length++;
             else break;
         }
         if((length > 2) && (length > lz.match.second)){
@@ -96,26 +118,24 @@ void find_match(LZ77 &lz){
 
 }
 
-void move_window(LZ77 &lz){
+void move_window(LZ77 &lz, const LZ77_config &cfg){
     int length = lz.match.second; //changed second with first
     if(length == 0){
         length = 1;
-        tokens.emplace_back(lz.ws.at(lz.look%read_size));
+        tokens.emplace_back(lz.ws.at(lz.look%cfg.window_size));
     }else{
         tokens.emplace_back(length , lz.match.first); //token(length, distance)
     }
 
     lz.look+=length;
-    //can be replace with lz.srch = std::max(0, lz.look-SEARCH_SIZE);
-    if(lz.look - lz.srch >= SEARCH_SIZE){ 
-        lz.srch = lz.look-SEARCH_SIZE;
-    }
+
+    if(lz.look > cfg.SEARCH_SIZE) lz.srch = std::max(lz.look-cfg.SEARCH_SIZE, lz.srch);
 }
 
 //might remove read from lz 77 struct
-void fill_window(uint64_t &read, LZ77 &lz){
-    int fill_size = (lz.srch+read_size)-lz.notav; //not sure this works
-    lz.in.read(&lz.ws.at(lz.notav%read_size), fill_size);
+void fill_window(uint64_t &read, LZ77 &lz, const LZ77_config &cfg){
+    int fill_size = (lz.srch+cfg.window_size)-lz.notav; //not sure this works
+    lz.in.read(&lz.ws.at(lz.notav%cfg.window_size), fill_size);
     read = lz.in.gcount();
     lz.notav+=read;
 }
