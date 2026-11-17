@@ -23,9 +23,9 @@ static struct LZ77{
 
     std::string ws;
 
-    uint64_t srch = 0; //limits
+    uint64_t llimit = 0; //limits
     uint64_t look = 1; 
-    uint64_t notav = 0; //limits
+    uint64_t rlimit = 0; //limits
 
 
     std::pair<int, int> match; //distance length
@@ -61,23 +61,23 @@ std::pair<bool, std::vector<token>> lz77_token(std::string file_name, int memLev
         lz77.in.read(&lz77.ws[0], cfg.window_size);
 
         read = lz77.in.gcount();
-        lz77.notav = read;
-        tokens.emplace_back(lz77.ws.at(lz77.srch)); //initialized the first letter
+        lz77.rlimit = read;
+        tokens.emplace_back(lz77.ws.at(lz77.llimit)); //initialized the first letter
     }else{
         tokens.clear();
         read = lz77.in.gcount();
-        tokens.emplace_back(lz77.ws.at(lz77.srch)); //first element to initialize
+        tokens.emplace_back(lz77.ws.at(lz77.llimit)); //first element to initialize
     }
 
-    while(lz77.look < lz77.notav){
-        if(lz77.look < cfg.min_lookup+lz77.notav && !lz77.in.eof()){ 
+    while(lz77.look < lz77.rlimit){
+        if(lz77.look < cfg.min_lookup+lz77.rlimit && !lz77.in.eof()){ 
             fill_window(read,lz77,cfg);
         }
         if(tokens.size() >= cfg.vec_size){
 
-            lz77.notav-=lz77.srch;
-            lz77.look-=lz77.srch;
-            lz77.srch= lz77.look;
+            lz77.rlimit-=lz77.llimit;
+            lz77.look-=lz77.llimit;
+            lz77.llimit= lz77.look;
 
             lz77.look++;
 
@@ -101,11 +101,11 @@ void find_match(LZ77 &lz, const LZ77_config &cfg){
     lz.match.second = 0;
     uint64_t distance = 1;
 
-    while(lz.look >= lz.srch+distance){
+    while(lz.look >= lz.llimit+distance){
 
         int length = 0;
 
-        while(lz.look+length < lz.notav){
+        while(lz.look+length < lz.rlimit){
             if(lz.ws.at((lz.look+length)%cfg.window_size) == lz.ws.at((lz.look-distance+length)%cfg.window_size)) length++;
             else break;
         }
@@ -129,13 +129,22 @@ void move_window(LZ77 &lz, const LZ77_config &cfg){
 
     lz.look+=length;
 
-    if(lz.look > cfg.SEARCH_SIZE) lz.srch = std::max(lz.look-cfg.SEARCH_SIZE, lz.srch);
+    if(lz.look > cfg.SEARCH_SIZE) lz.llimit = std::max(lz.look-cfg.SEARCH_SIZE, lz.llimit);
 }
 
-//might remove read from lz 77 struct
 void fill_window(uint64_t &read, LZ77 &lz, const LZ77_config &cfg){
-    int fill_size = (lz.srch+cfg.window_size)-lz.notav; //not sure this works
-    lz.in.read(&lz.ws.at(lz.notav%cfg.window_size), fill_size);
+    size_t rlimit = lz.rlimit %cfg.window_size;
+    size_t llimit = lz.llimit% cfg.window_size;
+
+    int fill1 = (rlimit >= llimit) ?
+        cfg.window_size - rlimit : llimit-rlimit;
+    
+    lz.in.read(&lz.ws.at(rlimit), fill1);
     read = lz.in.gcount();
-    lz.notav+=read;
+
+    if(fill1 == cfg.window_size-rlimit && read > 0){
+        lz.in.read(&lz.ws.at(0), llimit);
+        read+= lz.in.gcount();
+    }
+    lz.rlimit+=read;
 }
