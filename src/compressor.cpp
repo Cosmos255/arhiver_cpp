@@ -101,26 +101,10 @@ bool deflate(std::string input, std::string output, uint8_t mode, int memLevel){
                 bn_heap::insert({i, literal[i].freq});
             }
 
-            buildTree(); //treebuilder from bn heap
-            createCodes(literal); //creates the huffman codes
-            tree.clear();
-            bn_heap::clear();
+            buildLimited(literal, maxCodeValue, 15);
 
-            if(distance){
+            if(distance) buildLimited(dist, maxDistValue, 15); else dist[0].len = 0;
 
-            //dist codes
-                for(int i=0; i<maxDistValue; i++)
-                if(dist[i].freq){
-                    bn_heap::insert({i, dist[i].freq});
-                } 
-
-                buildTree();
-                createCodes(dist);
-                tree.clear();
-                bn_heap::clear();
-            
-            }else dist[0].len = 0;
-            
             HLIT = maxCodeValue;
             HDIST = maxDistValue;
 
@@ -136,12 +120,8 @@ bool deflate(std::string input, std::string output, uint8_t mode, int memLevel){
                 if(CCL[i].freq){
                     bn_heap::insert({i, CCL[i].freq});
             }
-            
-            buildTree(); //tree for CCL
-            createCodes(CCL); //codes for CCL
-            tree.clear();
-            bn_heap::clear();
 
+            buildLimited(CCL, 19, 7);
 
             //Creating the header and blocks and outputtign the data
 
@@ -278,12 +258,31 @@ void writeStored(){
 
         in.read(reinterpret_cast<char*>(outbuffer.data()+outbuff_indx), len);
         outbuff_indx+=len;
+        out.write(reinterpret_cast<char*>(outbuffer.data()), outbuff_indx);
     }
     out.write(reinterpret_cast<char*>(outbuffer.data()), outbuff_indx);
 
     in.close();
     out.close();
     
+}
+
+void buildLimited(FLC *arr, int n, int maxLen){
+    std::vector<int> freq(n);
+    for(int i = 0; i < n; i++) freq[i] = arr[i].freq;
+
+    while(true){
+        tree.clear(); bn_heap::clear();
+        for(int i = 0; i < n; i++){
+            arr[i].len = 0;
+            if(freq[i]) bn_heap::insert({i, freq[i]});
+        }
+        buildTree();
+        bool ok = createCodes(arr, maxLen);
+        tree.clear(); bn_heap::clear();
+        if(ok) return;
+        for(auto &f : freq) if(f) f = (f + 1) / 2;   // flatten, keep nonzero
+    }
 }
 
 void buildTree(){
@@ -319,11 +318,12 @@ void buildTree(){
     //th
 }
 
-void createLen(std::vector<bits> &val_len, FLC *arr, int i, uint16_t len = 1){
+void createLen(std::vector<bits> &val_len, FLC *arr, int i, uint16_t len = 0){
 
     if(len > MAX_BITS) throw std::runtime_error("BITS are tooo long");
 
     if(tree[i].left == -1 && tree[i].right == -1){
+        if(len == 0) len = 1;
         arr[tree[i].value].len = len;
         val_len.push_back({tree[i].value, len});
         return;
@@ -337,18 +337,10 @@ void createLen(std::vector<bits> &val_len, FLC *arr, int i, uint16_t len = 1){
     }
 }
 
-void createCodes(FLC *arr = nullptr){
+bool createCodes(FLC *arr, int maxLen){
     if(arr == nullptr) throw std::runtime_error("createCode received nullptr");
     std::vector<bits> code_lengths;
     
-    //canonical might be broken fix it :/ what a bitch
-    /*
-    !!! IF NO LEN OR NO DIST THERS NO FUNCTION TO FIX IT
-    !!! THE RESPONSE SHOULD BE THE FIRST SYMBOL HAS LENGHT 0
-    !!! so if ARR is empty then HDIST = 1(1-1=0) and the next code is 0
-    
-    */
-
     createLen(code_lengths, arr,tree.size()-1); //last element is root
 
     merge::sort(code_lengths,[](const bits &a, const bits &b){
@@ -357,20 +349,19 @@ void createCodes(FLC *arr = nullptr){
         return a.length < b.length;
     }); //ascending
 
+    if(code_lengths.back().length > maxLen) return false;
+
 
     int len=0;
     int code=0;
 
     for(auto &bts : code_lengths){
         if(bts.length == 0) continue;
-        if(len > 15) throw std::runtime_error("Code len longer than 15");
         if(bts.length > len) code<<=(bts.length-len);
         len = bts.length;
-        if(len <= 0) throw std::runtime_error("Code len 0 or negative");
         arr[bts.value].code = code++;
-
     }
-
+    return true;
 }
 
 void outputDictionary(){
@@ -523,7 +514,7 @@ void flush(bool forced){
     if(forced) rm = (bitpos + 7) & ~7;
     else rm = bitpos - (bitpos%8);
 
-    if(rm <= 0) throw std::runtime_error("Flush: retunrned negative or 0 removable bytes");
+    if(rm == 0 && !forced) return;
     bitpos-=rm;
 
     if(!out.is_open()) throw std::runtime_error("Flush: no output file opened");

@@ -65,22 +65,14 @@ std::pair<bool, std::vector<token>> lz77_token(std::string file_name, int memLev
         tokens.emplace_back(lz77.ws.at(lz77.llimit)); //initialized the first letter
     }else{
         tokens.clear();
-        read = lz77.in.gcount();
-        tokens.emplace_back(lz77.ws.at(lz77.llimit)); //first element to initialize
     }
 
     while(lz77.look < lz77.rlimit){
-        if(lz77.look < cfg.min_lookup+lz77.rlimit && !lz77.in.eof()){ 
+        if(lz77.rlimit - lz77.look < cfg.min_lookup && !lz77.in.eof()){ 
             fill_window(read,lz77,cfg);
         }
+     
         if(tokens.size() >= cfg.vec_size){
-
-            lz77.rlimit-=lz77.llimit;
-            lz77.look-=lz77.llimit;
-            lz77.llimit= lz77.look;
-
-            lz77.look++;
-
             lz_finish = false;
             return {lz_finish, tokens}; //lz finish should be false here
         }
@@ -109,7 +101,7 @@ void find_match(LZ77 &lz, const LZ77_config &cfg){
             if(lz.ws.at((lz.look+length)%cfg.window_size) == lz.ws.at((lz.look-distance+length)%cfg.window_size)) length++;
             else break;
         }
-        if((length > 2) && (length > lz.match.second)){
+        if((length >= cfg.min_match) && (length > lz.match.second)){
             lz.match.first = distance;
             lz.match.second = length;
         }
@@ -132,19 +124,21 @@ void move_window(LZ77 &lz, const LZ77_config &cfg){
     if(lz.look > cfg.SEARCH_SIZE) lz.llimit = std::max(lz.look-cfg.SEARCH_SIZE, lz.llimit);
 }
 
-void fill_window(uint64_t &read, LZ77 &lz, const LZ77_config &cfg){
-    size_t rlimit = lz.rlimit %cfg.window_size;
-    size_t llimit = lz.llimit% cfg.window_size;
+void fill_window(uint64_t &read, LZ77 &lz, const LZ77_config &cfg) {
+    const uint64_t W = cfg.window_size;
+    const uint64_t available = W - (lz.rlimit - lz.llimit);
+    const uint64_t pos = lz.rlimit % W;
+    const uint64_t first = std::min(available, W - pos);
 
-    int fill1 = (rlimit >= llimit) ?
-        cfg.window_size - rlimit : llimit-rlimit;
-    
-    lz.in.read(&lz.ws.at(rlimit), fill1);
+    lz.in.read(&lz.ws.at(pos), first);
     read = lz.in.gcount();
 
-    if(fill1 == cfg.window_size-rlimit && read > 0){
-        lz.in.read(&lz.ws.at(0), llimit);
-        read+= lz.in.gcount();
+    if (read == first && available > first) {
+        const uint64_t second = available - first;
+
+        lz.in.read(&lz.ws.at(0), second);
+        read += lz.in.gcount();
     }
-    lz.rlimit+=read;
+
+    lz.rlimit += read;
 }
